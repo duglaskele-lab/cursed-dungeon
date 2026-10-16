@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#07060a">
+<title>Проклятое подземелье — прототип</title>
+<style>
+  :root {
+    --u: 1px;                       /* 1 логический пиксель (540×960), задаётся из JS */
+    --gold: #e9c27a;
+    --gold-dim: #a8864a;
+    --ink: #f3ece0;
+    --ink-dim: #b9ae9c;
+    --panel: rgba(16, 12, 20, 0.92);
+    --line: rgba(233, 194, 122, 0.28);
+    --red: #e2554b;
+    --display: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --body: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: radial-gradient(ellipse at 50% 40%, #1d1622 0%, #07060a 70%);
+    color: var(--ink); font-family: var(--body);
+    user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  body { display: flex; align-items: center; justify-content: center; }
+  #stage { position: relative; overflow: hidden; box-shadow: 0 0 calc(var(--u)*60) rgba(0,0,0,.8); }
+  #game { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  .overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-start;
+    padding: calc(var(--u)*28) calc(var(--u)*24);
+    overflow-y: auto; touch-action: pan-y;
+    background: linear-gradient(180deg, rgba(7,6,10,.78), rgba(7,6,10,.92));
+  }
+  .hidden { display: none !important; }
+
+  h1 {
+    font-family: var(--display); font-weight: 600; letter-spacing: .04em;
+    font-size: calc(var(--u)*38); margin: calc(var(--u)*14) 0 0; color: var(--gold);
+    text-shadow: 0 0 calc(var(--u)*18) rgba(233,194,122,.35);
+    text-align: center;
+  }
+  .sub { color: var(--ink-dim); font-size: calc(var(--u)*14); margin-top: calc(var(--u)*4); letter-spacing: .08em; text-transform: uppercase; }
+  .section-title {
+    align-self: stretch; margin: calc(var(--u)*24) 0 calc(var(--u)*10);
+    font-family: var(--display); font-size: calc(var(--u)*18); color: var(--gold);
+    border-bottom: 1px solid var(--line); padding-bottom: calc(var(--u)*6);
+  }
+
+  .cards { align-self: stretch; display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u)*10); }
+  .card {
+    position: relative; border: 1px solid var(--line); border-radius: calc(var(--u)*10);
+    background: var(--panel); overflow: hidden; cursor: pointer; text-align: left; color: var(--ink);
+    padding: 0; font: inherit;
+  }
+  .card.sel { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 calc(var(--u)*20) rgba(233,194,122,.25); }
+  .card .portrait {
+    height: calc(var(--u)*130); background: radial-gradient(ellipse at 50% 30%, #3a2c3a, #120e16);
+    display: flex; align-items: flex-start; justify-content: center; overflow: hidden;
+  }
+  .card .portrait img { width: 118%; margin-top: calc(var(--u)*-2); object-fit: cover; object-position: top; pointer-events: none; }
+  .card .info { padding: calc(var(--u)*8) calc(var(--u)*10) calc(var(--u)*10); }
+  .card .name { font-family: var(--display); font-size: calc(var(--u)*17); color: var(--gold); }
+  .card .tag { font-size: calc(var(--u)*11.5); color: var(--ink-dim); margin-top: calc(var(--u)*2); }
+  .card .about { font-size: calc(var(--u)*11.5); line-height: 1.35; margin-top: calc(var(--u)*6); color: var(--ink); opacity: .9; }
+  .badge {
+    position: absolute; top: calc(var(--u)*7); right: calc(var(--u)*7);
+    background: rgba(233,194,122,.92); color: #1a1208; font-size: calc(var(--u)*10.5); font-weight: 700;
+    padding: calc(var(--u)*3) calc(var(--u)*7); border-radius: calc(var(--u)*20);
+  }
+  .badge.kind { left: calc(var(--u)*7); right: auto; background: rgba(226,85,75,.92); color: #fff; }
+
+  .levels { align-self: stretch; display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u)*12); margin-top: calc(var(--u)*12); }
+  .stepper {
+    border: 1px solid var(--line); border-radius: calc(var(--u)*10); background: var(--panel);
+    padding: calc(var(--u)*10); display: flex; flex-direction: column; align-items: center; gap: calc(var(--u)*6);
+  }
+  .stepper .lbl { font-size: calc(var(--u)*12); color: var(--ink-dim); text-transform: uppercase; letter-spacing: .08em; }
+  .stepper .row { display: flex; align-items: center; gap: calc(var(--u)*14); }
+  .stepper .val { font-family: var(--display); font-size: calc(var(--u)*28); min-width: calc(var(--u)*34); text-align: center; color: var(--gold); }
+  .round {
+    width: calc(var(--u)*40); height: calc(var(--u)*40); border-radius: 50%;
+    border: 1px solid var(--line); background: #1d1622; color: var(--ink); font-size: calc(var(--u)*22); cursor: pointer;
+  }
+  .hint { align-self: stretch; text-align: center; font-size: calc(var(--u)*12.5); color: var(--ink-dim); margin-top: calc(var(--u)*8); line-height: 1.4; }
+
+  .btn {
+    margin-top: calc(var(--u)*18); min-width: calc(var(--u)*220);
+    padding: calc(var(--u)*14) calc(var(--u)*24); border-radius: calc(var(--u)*12);
+    font-family: var(--display); font-size: calc(var(--u)*22); letter-spacing: .05em; cursor: pointer;
+    color: #1a1208; background: linear-gradient(180deg, #f3d89c, #c9984f); border: 0;
+    box-shadow: 0 calc(var(--u)*4) calc(var(--u)*18) rgba(233,194,122,.25);
+  }
+  .btn.big { font-size: calc(var(--u)*26); padding: calc(var(--u)*18) calc(var(--u)*34); margin-top: calc(var(--u)*26); }
+  .btn.ghost { background: transparent; color: var(--gold); border: 1px solid var(--line); box-shadow: none; font-size: calc(var(--u)*18); }
+  .btn-row { display: flex; gap: calc(var(--u)*12); flex-wrap: wrap; justify-content: center; }
+  .btn-row .btn { min-width: calc(var(--u)*150); }
+
+  .controls { align-self: stretch; list-style: none; margin: 0; padding: 0; display: grid; gap: calc(var(--u)*6); }
+  .controls li {
+    display: grid; grid-template-columns: calc(var(--u)*118) 1fr; gap: calc(var(--u)*10);
+    font-size: calc(var(--u)*13); line-height: 1.35; padding: calc(var(--u)*7) calc(var(--u)*10);
+    background: var(--panel); border: 1px solid rgba(233,194,122,.12); border-radius: calc(var(--u)*8);
+  }
+  .controls b { color: var(--gold); font-weight: 600; }
+
+  .log { align-self: stretch; font-size: calc(var(--u)*12.5); color: var(--ink-dim); display: grid; gap: calc(var(--u)*4); }
+  .log div { display: flex; justify-content: space-between; gap: calc(var(--u)*10); border-bottom: 1px dashed rgba(233,194,122,.12); padding: calc(var(--u)*3) 0; }
+  .foot { margin-top: calc(var(--u)*16); display: flex; gap: calc(var(--u)*14); font-size: calc(var(--u)*12.5); }
+  .link { color: var(--ink-dim); background: none; border: 0; text-decoration: underline; cursor: pointer; font: inherit; }
+
+  /* итоги боя */
+  #result { justify-content: center; }
+  #result h1 { font-size: calc(var(--u)*46); margin-top: 0; }
+  #result .sub { text-transform: none; letter-spacing: 0; font-size: calc(var(--u)*15); text-align: center; max-width: calc(var(--u)*440); line-height: 1.4; }
+  .stats { margin-top: calc(var(--u)*18); align-self: stretch; display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u)*8); }
+  .stat { background: var(--panel); border: 1px solid rgba(233,194,122,.14); border-radius: calc(var(--u)*8); padding: calc(var(--u)*8) calc(var(--u)*12); }
+  .stat .k { font-size: calc(var(--u)*11.5); color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  .stat .v { font-family: var(--display); font-size: calc(var(--u)*21); color: var(--ink); margin-top: calc(var(--u)*2); }
+  .stat.wide { grid-column: 1 / -1; }
+  .ok { color: #9fd98a !important; } .warn { color: #f0b35a !important; } .bad { color: var(--red) !important; }
+
+  /* панель событий / привала / наград — в стиле визуальной новеллы */
+  #panel { justify-content: flex-end; padding: 0; background: linear-gradient(180deg, rgba(7,6,10,.35), rgba(7,6,10,.86) 55%, rgba(7,6,10,.96)); }
+  #panel .p-art { position: absolute; left: 0; right: 0; top: calc(var(--u)*30); bottom: calc(var(--u)*300); display: flex; justify-content: center; align-items: flex-end; pointer-events: none; }
+  #panel .p-art img { max-height: 100%; max-width: 92%; object-fit: contain; filter: drop-shadow(0 0 calc(var(--u)*24) rgba(0,0,0,.7)); }
+  #panel .p-box {
+    position: relative; align-self: stretch; margin: 0 calc(var(--u)*14) calc(var(--u)*16);
+    background: rgba(14,10,18,.94); border: 1px solid var(--line); border-radius: calc(var(--u)*14);
+    padding: calc(var(--u)*16) calc(var(--u)*18) calc(var(--u)*14);
+    box-shadow: 0 0 calc(var(--u)*30) rgba(0,0,0,.6);
+  }
+  #panel .p-kicker { font-size: calc(var(--u)*11.5); letter-spacing: .12em; text-transform: uppercase; color: var(--gold-dim); }
+  #panel .p-title { font-family: var(--display); font-size: calc(var(--u)*26); color: var(--gold); margin-top: calc(var(--u)*2); }
+  #panel .p-text { font-size: calc(var(--u)*15); line-height: 1.5; margin-top: calc(var(--u)*8); white-space: pre-line; }
+  #panel .p-choices { display: grid; gap: calc(var(--u)*8); margin-top: calc(var(--u)*14); }
+  .choice {
+    text-align: left; font: inherit; color: var(--ink); cursor: pointer;
+    background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: calc(var(--u)*10);
+    padding: calc(var(--u)*10) calc(var(--u)*14);
+  }
+  .choice:hover { border-color: var(--gold); }
+  .choice b { display: block; font-family: var(--display); font-size: calc(var(--u)*17); color: var(--gold); font-weight: 600; }
+  .choice span { display: block; font-size: calc(var(--u)*13); color: var(--ink-dim); margin-top: calc(var(--u)*2); line-height: 1.35; }
+  .choice .ck { float: right; font-size: calc(var(--u)*10.5); letter-spacing: .1em; text-transform: uppercase; color: var(--gold-dim); margin-top: calc(var(--u)*3); }
+  .choice[disabled] { opacity: .45; cursor: default; }
+  .choice.relic { border-color: rgba(180,140,255,.55); }
+  .choice.relic b { color: #d6c2ff; }
+
+
+  /* редактор противниц */
+  #editor { align-items: stretch; }
+  #editor h1 { margin-top: 0; }
+  #editor .sub { align-self: center; text-transform: none; letter-spacing: 0; text-align: center; }
+  .ed-list { display: grid; gap: calc(var(--u)*8); margin-top: calc(var(--u)*14); }
+  .ed-item { display: grid; grid-template-columns: calc(var(--u)*64) 1fr auto; gap: calc(var(--u)*10); align-items: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: calc(var(--u)*10); padding: calc(var(--u)*8); }
+  .ed-item img { width: calc(var(--u)*64); height: calc(var(--u)*64); object-fit: cover; object-position: top; border-radius: calc(var(--u)*6); background: #1d1622; }
+  .ed-item .nm { font-family: var(--display); font-size: calc(var(--u)*17); color: var(--gold); }
+  .ed-item .ds { font-size: calc(var(--u)*12); color: var(--ink-dim); }
+  .ed-item .acts { display: flex; flex-direction: column; gap: calc(var(--u)*4); }
+  .mini { font: inherit; font-size: calc(var(--u)*12.5); padding: calc(var(--u)*5) calc(var(--u)*10); border-radius: calc(var(--u)*7);
+    background: rgba(255,255,255,.05); color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
+  .mini.danger { color: #ff9a8f; border-color: rgba(226,85,75,.45); }
+  .ed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u)*8) calc(var(--u)*10); }
+  .ed-grid .full { grid-column: 1 / -1; }
+  .ed-f { display: flex; flex-direction: column; gap: calc(var(--u)*3); font-size: calc(var(--u)*12); color: var(--ink-dim); }
+  .ed-f input, .ed-f select, .ed-f textarea {
+    font: inherit; font-size: calc(var(--u)*14); color: var(--ink); background: #1a1420; border: 1px solid var(--line);
+    border-radius: calc(var(--u)*7); padding: calc(var(--u)*7) calc(var(--u)*9); width: 100%;
+  }
+  .ed-f textarea { min-height: calc(var(--u)*58); resize: vertical; }
+  .ed-f input[type=range] { padding: 0; }
+  .ed-pair { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u)*6); }
+  .ed-checks { display: flex; flex-wrap: wrap; gap: calc(var(--u)*6) calc(var(--u)*14); font-size: calc(var(--u)*13.5); color: var(--ink); }
+  .ed-checks label { display: flex; align-items: center; gap: calc(var(--u)*6); }
+  .ed-checks input[type=checkbox] { width: auto; flex: 0 0 auto; padding: 0; margin: 0; accent-color: var(--gold); }
+  .ed-file { display: block; border: 1px dashed var(--line); border-radius: calc(var(--u)*10); padding: calc(var(--u)*12); text-align: center;
+    font-size: calc(var(--u)*13.5); color: var(--ink); background: rgba(255,255,255,.03); cursor: pointer; }
+  .ed-file input { display: none; }
+  .ed-file b { color: var(--gold); }
+  .ed-thumbs { display: flex; gap: calc(var(--u)*8); overflow-x: auto; margin-top: calc(var(--u)*10); padding-bottom: calc(var(--u)*4); }
+  .ed-thumbs figure { margin: 0; flex: 0 0 auto; text-align: center; font-size: calc(var(--u)*11.5); color: var(--ink-dim); }
+  .ed-thumbs img { height: calc(var(--u)*190); border-radius: calc(var(--u)*8); border: 1px solid var(--line);
+    background: conic-gradient(#2a2230 25%, #1d1724 0 50%, #2a2230 0 75%, #1d1724 0) 0 0 / calc(var(--u)*16) calc(var(--u)*16); }
+  .ed-status { margin-top: calc(var(--u)*8); font-size: calc(var(--u)*13); color: var(--ink-dim); min-height: calc(var(--u)*18); white-space: pre-line; }
+  .ed-status.err { color: #ff9a8f; } .ed-status.ok { color: #9fd98a; }
+  .ed-note { font-size: calc(var(--u)*12); color: var(--ink-dim); line-height: 1.4; margin-top: calc(var(--u)*6); }
+
+  #pauseBtn {
+    position: absolute; top: calc(var(--u)*118); right: calc(var(--u)*14);
+    width: calc(var(--u)*40); height: calc(var(--u)*40); border-radius: 50%;
+    border: 1px solid var(--line); background: rgba(16,12,20,.7); color: var(--gold);
+    font-size: calc(var(--u)*15); font-weight: 700; cursor: pointer; z-index: 5;
+  }
+  #pause { justify-content: center; }
+  #loading { justify-content: center; font-family: var(--display); font-size: calc(var(--u)*22); color: var(--gold); }
+  #loading .err { font-family: var(--body); font-size: calc(var(--u)*14); color: var(--red); margin-top: calc(var(--u)*12); text-align: center; max-width: calc(var(--u)*420); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+
+  <div id="loading" class="overlay">Загрузка…</div>
+
+  <div id="menu" class="overlay hidden">
+    <h1>Проклятое подземелье</h1>
+    <div class="sub">Прототип · v0.5</div>
+
+    <button class="btn big" id="runBtn">Начать забег</button>
+    <div class="hint">Этаж 1: подъём из темницы — комнаты с развилками, события, привал, элита и босс.<br>Герой начинает с 1-го уровня, пойманные спутницы остаются навсегда.</div>
+
+    <div class="section-title">Тренировочный бой</div>
+    <div class="cards" id="cards"></div>
+    <div class="levels">
+      <div class="stepper"><div class="lbl">Герой</div><div class="row"><button class="round" data-step="hero:-1">−</button><div class="val" id="lvHero">1</div><button class="round" data-step="hero:1">+</button></div></div>
+      <div class="stepper"><div class="lbl">Противница</div><div class="row"><button class="round" data-step="enemy:-1">−</button><div class="val" id="lvEnemy">1</div><button class="round" data-step="enemy:1">+</button></div></div>
+    </div>
+    <div class="hint" id="lvHint"></div>
+    <button class="btn ghost" id="startBtn">Тренировка</button>
+    <button class="btn ghost" id="editorBtn">Редактор противниц</button>
+    <div class="hint">Добавьте свою героиню: загрузите лист со стадиями, задайте характеристики и сразу проверьте в бою.</div>
+
+    <div class="section-title">Управление</div>
+    <ul class="controls">
+      <li><b>Тап</b><span>Удар. Тратит выносливость — при спаме наступает одышка.</span></li>
+      <li><b>Пауза</b><span>Не бей 0,6 с — следующий удар заряжается до ×2,5.</span></li>
+      <li><b>Круг удара</b><span>Во время замаха на противнице появляется круг. Нажми в него, когда кольцо зелёное — парирование. Держи палец в круге в момент удара — блок. Нажатия и росчерки по кругу не ранят её.</span></li>
+      <li><b>Росчерк</b><span>Проведи по противнице — рассечение, использует заряд.</span></li>
+      <li><b>Росчерк по сферам</b><span>Соедини две и более сферы — противница теряет выносливость.</span></li>
+      <li><b>Броня</b><span>Выносливость ниже 30% — заряженный удар или росчерк ломает часть брони.</span></li>
+      <li><b>Сломлена</b><span>Удерживай палец на ней — захват. Тап — добить.</span></li>
+    </ul>
+
+    <div class="section-title">Пойманные спутницы</div>
+    <div class="log" id="collection"></div>
+
+    <div class="section-title">Последние бои</div>
+    <div class="log" id="log"></div>
+
+    <div class="foot">
+      <button class="link" id="soundBtn">Звук: вкл</button>
+      <button class="link" id="resetBtn">Сбросить сохранение</button>
+    </div>
+  </div>
+
+  <div id="result" class="overlay hidden">
+    <h1 id="resTitle">Захвачена!</h1>
+    <div class="sub" id="resSub"></div>
+    <div class="stats" id="resStats"></div>
+    <div class="btn-row">
+      <button class="btn hidden" id="nextBtn">Дальше</button>
+      <button class="btn" id="againBtn">Ещё раз</button>
+      <button class="btn ghost" id="menuBtn">В меню</button>
+    </div>
+  </div>
+
+  <div id="panel" class="overlay hidden">
+    <div class="p-art"><img id="pImg" alt=""></div>
+    <div class="p-box">
+      <div class="p-kicker" id="pKicker"></div>
+      <div class="p-title" id="pTitle"></div>
+      <div class="p-text" id="pText"></div>
+      <div class="p-choices" id="pChoices"></div>
+    </div>
+  </div>
+
+  <div id="editor" class="overlay hidden"></div>
+
+  <div id="pause" class="overlay hidden">
+    <h1>Пауза</h1>
+    <div class="btn-row" style="flex-direction:column;align-items:center">
+      <button class="btn" id="resumeBtn">Продолжить</button>
+      <button class="btn ghost" id="pauseSoundBtn">Звук: вкл</button>
+      <button class="btn ghost" id="quitBtn">Выйти в меню</button>
+    </div>
+  </div>
+
+  <button id="pauseBtn" class="hidden" aria-label="Пауза">II</button>
+</div>
+
+<script src="js/data.js"></script>
+<!-- локальный пакет спрайтов: packs/pack.js не хранится в git (см. packs/README.md) -->
+<script src="packs/pack.js" onerror="this.remove()"></script>
+<script src="js/game.js"></script>
+<script src="js/editor.js"></script>
+</body>
+</html>

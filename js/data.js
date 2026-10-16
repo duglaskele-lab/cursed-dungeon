@@ -1,0 +1,111 @@
+// Данные прототипа. Новая противница = папка со спрайтами + запись здесь.
+// Стадии спрайтов идут от целой брони к «сломлена». Частей брони — поле armor (если его нет: стадий − 1).
+// Спрайтов может быть меньше, чем частей брони: стадии сменяются по доле сломанной брони.
+window.GAME_DATA = {
+  hero: {
+    hp: 200,            // здоровье на 1-м уровне
+    hpPerLvl: 25,       // + за каждый уровень
+    dmg: 10,            // урон тапа на 1-м уровне
+    dmgPerLvl: 0.25,    // +25% урона за уровень
+    stamina: 100,
+    tapCost: 8,         // выносливость за тап
+    slashCost: 10,      // выносливость за росчерк
+    stamRegen: 25,      // восстановление в секунду
+    seals: 2,           // печати захвата на старте забега
+    parryMin: 0.08,     // нажатие в круг удара за 0.08–0.48 с до удара — парирование
+    parryMax: 0.48,     //   (окно 0.40 с — на 33% шире прежнего 0.12–0.42)
+    blockTaken: 0.2     // палец держится в круге в момент удара — блок, проходит 20% урона
+  },
+
+  // Каждый уровень разницы даёт ×1.12 к урону того, кто сильнее
+  levelDiffFactor: 1.12,
+
+  // Опыт до следующего уровня героя: base + perLvl × уровень
+  xp: { base: 40, perLvl: 40 },
+
+  elements: {
+    fire:     { name: 'Огонь',   color: '#ff7a2a', core: '#ffe2a8', effect: 'Горение' },
+    ice:      { name: 'Лёд',     color: '#7fd8ff', core: '#effcff', effect: 'Холод' },
+    electric: { name: 'Молния',  color: '#b48cff', core: '#f3ecff', effect: 'Шок' },
+    nature:   { name: 'Природа', color: '#6fdc6a', core: '#eaffd8', effect: 'Лечит противницу' },
+    ghost:    { name: 'Призрачный огонь', color: '#5fc6ff', core: '#e6f8ff', effect: 'Горение и замедление заряда' }
+  },
+
+  enemies: {
+    bunny: {
+      name: 'Крольчиха', subtitle: 'Стесняшка с морковкой', kind: 'normal',
+      sprites: ['assets/bunny/stage1.png'], armor: 2, chest: 0.66,
+      hp: 1050, stamina: 140, stamRegen: 7, xp: 50,
+      attack: { dmg: 6, telegraph: 0.85, follow: 0.65, interval: [1.6, 2.6], strikes: [1, 2] },
+      spheres: { every: [6, 8], count: [2, 3], grow: [3.4, 4.4], elements: ['electric'] },
+      about: 'Пугается и бьёт часто, но слабо, иногда дважды подряд. Электрические сферы: шок срывает три следующих удара.'
+    },
+    miko: {
+      name: 'Лиса-жрица', subtitle: 'Хранительница лисьих огней', kind: 'normal',
+      sprites: ['assets/miko/stage1.png'], armor: 2, chest: 0.7,
+      hp: 1250, stamina: 170, stamRegen: 6, xp: 60,
+      attack: { dmg: 12, telegraph: 1.1, follow: 0.8, interval: [2.2, 3.2], strikes: [1, 2] },
+      spheres: { every: [5.5, 7], count: [2, 3], grow: [3.4, 4.4], elements: ['fire', 'fire', 'ice'] },
+      about: 'Неторопливая и спокойная: долгий замах, удобно парировать. Часто зажигает лисьи огни — огненные и ледяные сферы.'
+    },
+    wolf: {
+      name: 'Волчица', subtitle: 'Вожак стаи', kind: 'elite',
+      sprites: ['assets/wolf/stage1.png'], armor: 2, chest: 0.7, rage: true,
+      hp: 2100, stamina: 290, stamRegen: 7, xp: 140,
+      attack: { dmg: 10, telegraph: 0.85, follow: 0.7, interval: [1.9, 2.8], strikes: [1, 3] },
+      spheres: { every: [9, 11], count: [2, 2], grow: [3.6, 4.4], elements: ['ice'] },
+      about: 'Мини-босс. Серии до трёх ударов. Каждая сломанная часть брони приводит её в ярость: атакует чаще.'
+    },
+    nekomata: {
+      name: 'Нэкомата', subtitle: 'Двухвостая повариха подземелья', kind: 'boss',
+      sprites: ['assets/nekomata/stage1.png'], armor: 2, chest: 0.68, theme: 'spirit', hazard: 'wisps',
+      hp: 4600, stamina: 600, stamRegen: 8, xp: 0,
+      attack: { dmg: 11, telegraph: 1.05, follow: 0.8, interval: [2.2, 3.2], strikes: [1, 2] },
+      spheres: { every: [7, 9], count: [2, 3], grow: [3.6, 4.4], elements: ['ghost', 'ghost', 'fire'] },
+      // Фаза меняется на каждой сломанной части брони
+      phases: [
+        { title: 'Повариха', sub: 'Удары половником и призрачный огонь' },
+        { title: 'Фаза 2 — Блуждающие огни', sub: 'Серии ударов и огоньки: развеивай их росчерком',
+          attack: { strikes: [2, 3], interval: [1.9, 2.8] }, vines: { every: [9, 12] } },
+        { title: 'Фаза 3 — Второй хвост', sub: 'Быстрый замах, больше сфер и огоньков',
+          attack: { telegraph: 0.92, follow: 0.72, strikes: [2, 3], interval: [1.7, 2.5], dmg: 14 },
+          spheres: { every: [5, 7], count: [3, 3] }, vines: { every: [6, 8] } }
+      ],
+      intro: '«Опять сбежал из темницы? Хозяйка велела тебя накормить… половником. Садись, остынет!»',
+      about: 'Босс. Три фазы: с каждой сломанной частью брони — новые атаки. Призрачные огоньки лишают защиты, сферы холодного пламени жгут и замедляют заряд.'
+    }
+  },
+
+  relics: [
+    { id: 'fang',  name: 'Клык охотницы',     text: 'Парирование полностью заряжает следующий удар.' },
+    { id: 'moon',  name: 'Лунный осколок',    text: 'Связка из 3+ сфер ломает часть брони, если противница измотана.' },
+    { id: 'ember', name: 'Тлеющий уголь',     text: 'Заряженный удар поджигает противницу: 4% здоровья за 3 с.' },
+    { id: 'belt',  name: 'Пояс выдержки',     text: 'Удары тратят на 30% меньше выносливости.' },
+    { id: 'seal',  name: 'Печать охотницы',   text: '+1 печать захвата сразу и к запасу.' },
+    { id: 'heart', name: 'Сердце горы',       text: '+25 к максимальному здоровью.' },
+    { id: 'bell',  name: 'Колокольчик ведьмы', text: 'Сферы противниц растут на 30% медленнее.' },
+    { id: 'claw',  name: 'Коготь тигрицы',    text: 'Удар по слабой точке ×3 вместо ×2.' }
+  ],
+
+  upgrades: [
+    { id: 'dmg',    name: 'Тяжёлая рука',   text: '+12% урона.' },
+    { id: 'charge', name: 'Собранность',    text: 'Заряд копится на 20% быстрее.' },
+    { id: 'parry',  name: 'Чутьё',          text: 'Окно парирования +0,08 с.' },
+    { id: 'stam',   name: 'Выносливость',   text: '+20 к выносливости.' },
+    { id: 'regen',  name: 'Дыхание',        text: 'Выносливость восстанавливается на 25% быстрее.' },
+    { id: 'hp',     name: 'Закалка',        text: '+15 к максимальному здоровью и лечение на 15.' }
+  ],
+
+  // План этажа: типы комнат по слоям (внутри слоя порядок перемешивается)
+  floor: {
+    name: 'Этаж 1 — Подъём из темницы',
+    layers: [
+      { rooms: ['fight', 'event'],            pool: ['bunny', 'miko'],  lvl: 1 },
+      { rooms: ['fight', 'treasure', 'fight'], pool: ['bunny', 'miko'],  lvl: 2 },
+      { rooms: ['elite', 'fight', 'rest'],     pool: ['miko', 'bunny'],  lvl: 2, eliteLvl: 3 },
+      { rooms: ['rest', 'fight'],              pool: ['miko', 'bunny'],  lvl: 3 },
+      { rooms: ['boss'],                       boss: 'nekomata',         lvl: 4 }
+    ],
+    elite: 'wolf'
+  }
+};

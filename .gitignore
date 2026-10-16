@@ -1,0 +1,17 @@
+# Локальные спрайты и настройки — не публикуются
+packs/*
+!packs/README.md
+!packs/pack.example.js
+
+# Исходники и черновики арта
+src/
+*.psd
+*.kra
+
+# Python
+__pycache__/
+*.pyc
+
+# Системное
+.DS_Store
+Thumbs.db
