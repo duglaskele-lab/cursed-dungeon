@@ -26,8 +26,8 @@
   const GUARD_HIT = 88;        // радиус, в котором нажатие засчитывается
   const CHARGE_START = 0.6, CHARGE_FULL = 2.0, CHARGE_MAX = 2.5;
   const CHARGED = 1.75;        // множитель, с которого удар считается заряженным
-  const CAPTURE_TIME = 1.5;
-  const SUBDUE_WINDOW = 3.0;
+  const CIRCLE_MIN_R = 45;      // круг захвата: минимальный радиус
+  const CIRCLE_SWEEP = 5.2;     //   и сколько радиан нужно обойти вокруг центра (≈300°)
   const HUD_TOP = 112, HUD_BOTTOM = 742;
   const displayFont = '"Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif';
   const bodyFont = '"Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif';
@@ -152,7 +152,7 @@
       const stages = [];
       for (const src of e.sprites) {
         const img = await loadImage(src);
-        stages.push({ img, white: tinted(img, '#ffffff'), red: tinted(img, '#ff2a2a'), dark: tinted(img, '#0a0610'), w: img.naturalWidth, h: img.naturalHeight });
+        stages.push({ img, white: tinted(img, '#ffffff'), red: tinted(img, '#ff2a2a'), w: img.naturalWidth, h: img.naturalHeight });
       }
       assets[id] = { stages };
     }));
@@ -385,14 +385,14 @@
         atk: { ...ed.attack }, sph: { ...ed.spheres }, vinesCfg: null, phase: 0,
         stage: 0, parts: armorParts(ed, st.length), state: 'idle', st: 0,
         nextAttack: rand(1.4, 2.2), strikesLeft: 0, telDur: 0, lastStamHit: -9,
-        nextSpheres: rand(3, 5), nextWeak: rand(3, 5), nextVine: rand(3, 5), capture: 0, lastStand: false,
+        nextSpheres: rand(3, 5), nextWeak: rand(3, 5), nextVine: rand(3, 5), lastStand: false,
         burn: 0, burnDps: 0, burnTick: 0,
         anim: { white: 0, lunge: 0, knock: 0, sx: 1, sy: 1 }
       },
       spheres: [], weak: null, vines: [], hazard: HAZARDS[ed.hazard] || HAZARDS.vines, guardT: -9, guardPresses: [],
       fx: { texts: [], parts: [], shards: [], trails: [], links: [], shields: [] },
       shake: 0, hitStop: 0, tip: '', tipT: 0, banner: null,
-      stats: { taps: 0, slashes: 0, parries: 0, blocks: 0, links: 0, breaks: 0, taken: 0, vines: 0 }
+      stats: { taps: 0, slashes: 0, parries: 0, blocks: 0, links: 0, breaks: 0, taken: 0, vines: 0, captureTries: 0, captures: 0 }
     };
     const e = fight.enemy;
     e.hp = e.hpMax;
@@ -446,10 +446,12 @@
     return 1 + (CHARGE_MAX - 1) * clamp((h.chargeT - CHARGE_START) / (CHARGE_FULL - CHARGE_START), 0, 1);
   }
   function isLastStage(e) { return e.stage >= e.parts; }
-  // Рядовые без брони не получают бонусного урона; босс сохраняет бонус
-  function armorBonus(e) { return e.kind !== 'boss' && isLastStage(e) ? 1 : 1 + 0.25 * e.stage; }
+  // Каждая сломанная часть брони — +25% урона; без брони урон ×2 (D.broken.dmgMul)
+  function armorBonus(e) { return isLastStage(e) ? D.broken.dmgMul : 1 + 0.25 * e.stage; }
+  // Шанс захвата: 70% при нулевой выносливости, 0% при полной
+  function captureChance(e) { return D.broken.captureChance * (1 - clamp(e.stam / e.stamMax, 0, 1)); }
   function fighting() { return fight && !fight.over; }
-  function enemyActive(e) { return !['leaving', 'subdued'].includes(e.state); }
+  function enemyActive(e) { return e.state !== 'leaving'; }
   const tired = (e) => e.stam < e.stamMax * 0.3;
 
   function spendStamina(h, cost) {
@@ -479,7 +481,6 @@
     if (!fighting()) return;
     const h = fight.hero, e = fight.enemy;
     input.lastTapT = fight.t;
-    if (e.state === 'subdued') { finishOff(); return; }
     for (const s of fight.spheres) {
       if (dist(x, y, s.x, s.y) < s.r + 14) {
         s.taps++; s.r *= 0.86; s.hitFlash = 1;
@@ -531,7 +532,6 @@
     if (!fighting()) return;
     const h = fight.hero, e = fight.enemy;
     const p0 = path[0], p1 = path[path.length - 1];
-    if (e.state === 'subdued') { finishOff(); return; }
     if (!enemyActive(e)) return;
     fight.fx.trails.push({ pts: path.map((p) => ({ x: p.x, y: p.y })), t: 0, life: 0.35, color: '#ffffff', w: 10 });
     if (h.shock > 0) { h.shock--; h.chargeT = 0; floatText(p1.x, p1.y, t('fight.shockSlash'), D.elements.electric.color, 22); sfx.fail(); return; }
@@ -575,9 +575,7 @@
   }
 
   function tryBreak(e) {
-    if (!tired(e) || !enemyActive(e)) return;
-    if (!isLastStage(e)) breakArmor(e);
-    else subdue(e);
+    if (tired(e) && enemyActive(e) && !isLastStage(e)) breakArmor(e);
   }
 
   function breakArmor(e) {
@@ -589,8 +587,8 @@
     fight.shake = 16; fight.hitStop = 0.12;
     e.anim.white = 1;
     sfx.armor();
-    if (isLastStage(e) && e.kind !== 'boss') { subdue(e); return; }
-    floatText(L.cx, L.chestY - 40, t('fight.armorBroken'), '#ffe2a8', 34, 1.4, -30);
+    const last = isLastStage(e);
+    floatText(L.cx, L.chestY - 40, t(last ? 'fight.shattered' : 'fight.armorBroken'), last ? '#ffd060' : '#ffe2a8', last ? 36 : 34, 1.4, -30);
     e.state = 'stun'; e.st = 1.5; e.strikesLeft = 0;
     e.stam = e.stamMax * 0.85;
     if (e.kind === 'boss') applyPhase(e, e.stage);
@@ -599,30 +597,41 @@
       e.atk.telegraph = Math.max(0.62, e.atk.telegraph * 0.92);
       fight.banner = { title: t('fight.rage'), sub: t('fight.rageSub'), t: 0, life: 1.6 };
     }
-    tip(t('tip.armorBroken'));
+    // без брони рядовые атакуют вдвое реже; сдаться она не может — бой до конца здоровья или до захвата
+    if (last && e.kind !== 'boss' && !e.lastStand) {
+      e.lastStand = true;
+      e.atk.interval = e.atk.interval.map((v) => v * 2);
+    }
+    if (last) tip(fight.hero.seals > 0 ? t('tip.shattered') : t('tip.shatteredNoSeals'), 4);
+    else tip(t('tip.armorBroken'));
   }
 
-  function subdue(e) {
-    const L = fight.layout;
-    e.state = 'subdued'; e.st = SUBDUE_WINDOW; e.strikesLeft = 0; e.capture = 0;
-    floatText(L.cx, L.chestY - 40, t('fight.subdued'), '#ffd060', 38, 1.6, -25);
-    for (const s of fight.spheres) burst(s.x, s.y, 8, [D.elements[s.el].color], 140, 0.4, 3, 0);
-    fight.spheres = []; fight.weak = null; fight.vines = [];
-    tip(fight.hero.seals > 0 ? t('tip.subdue') : t('tip.subdueNoSeals'), 3);
-  }
-
-  function finishOff() {
-    const L = fight.layout;
-    fight.fx.trails.push({ pts: [{ x: L.cx - 180, y: L.chestY - 120 }, { x: L.cx + 180, y: L.chestY + 140 }], t: 0, life: 0.6, color: '#ffd060', w: 26 });
-    burst(L.cx, L.chestY, 40, ['#ffd060', '#ffffff', '#ff9a50'], 480, 0.8, 5, 200);
-    fight.shake = 18;
-    sfx.slash(); sfx.win();
-    endFight('finished');
+  // Захват: круг, начерченный на противнице без брони. Удача — печать тратится, противница поймана;
+  // неудача — она получает урон росчерка (печать остаётся).
+  function tryCapture(path, ring) {
+    const h = fight.hero, e = fight.enemy;
+    if (h.seals <= 0 || h.shock > 0) {
+      if (h.seals <= 0) floatText(ring.x, ring.y - ring.r - 18, t('fight.noSeals'), '#ffb070', 22);
+      heroSlash(path);
+      return;
+    }
+    const chance = captureChance(e);
+    fight.stats.captureTries++;
+    if (Math.random() < chance) {
+      fight.fx.trails.push({ pts: path.map((p) => ({ x: p.x, y: p.y })), t: 0, life: 0.9, color: '#e9c27a', w: 20 });
+      capture();
+      return;
+    }
+    fight.fx.trails.push({ pts: path.map((p) => ({ x: p.x, y: p.y })), t: 0, life: 0.5, color: '#ff8a6a', w: 14 });
+    floatText(ring.x, ring.y - ring.r - 18, t('fight.captureFail', { p: Math.round(chance * 100) }), '#ff9a7a', 26, 1.2, -40);
+    sfx.fail();
+    heroSlash(path);
   }
 
   function capture() {
     const h = fight.hero;
     h.seals--;
+    fight.stats.captures++;
     sfx.capture();
     const L = fight.layout;
     burst(L.cx, L.chestY, 50, ['#e9c27a', '#fff3d0', '#b48cff'], 300, 1, 4, 0);
@@ -633,7 +642,7 @@
 
   function endByEnemyHp() {
     const e = fight.enemy;
-    if (e.state === 'subdued' || isLastStage(e)) { sfx.win(); endFight('defeated'); }
+    if (isLastStage(e)) { sfx.win(); endFight('defeated'); }
     else endFight('escaped');
   }
 
@@ -678,7 +687,6 @@
       burst(L.cx, L.chestY + 60, 30, ['#ffffff', '#bfefff', '#7fd8ff'], 420, 0.5, 4, 100);
       fight.shake = Math.max(fight.shake, 6);
       sfx.parry();
-      if (tired(e) && isLastStage(e)) { subdue(e); return; }
       e.state = 'stun'; e.st = 0.7; e.strikesLeft = 0;
       return;
     }
@@ -783,9 +791,36 @@
     const d1 = cr(c, d, a), d2 = cr(c, d, b), d3 = cr(a, b, c), d4 = cr(a, b, d);
     return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
   }
+  // Зона противницы, по которой засчитываются рассечение и круг захвата
+  function enemyBox() {
+    const L = fight.layout;
+    return { x0: L.cx - L.dw * 0.32, x1: L.cx + L.dw * 0.32, y0: L.top + L.dh * 0.08, y1: L.bottom - 20 };
+  }
+  const inBox = (b, x, y) => x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1;
+
+  // Росчерк-круг: путь обходит свой центр почти полностью, радиус не меньше CIRCLE_MIN_R, форма близка к окружности
+  function circleGesture(path) {
+    if (path.length < 8) return null;
+    let cx = 0, cy = 0;
+    for (const p of path) { cx += p.x; cy += p.y; }
+    cx /= path.length; cy /= path.length;
+    const ds = path.map((p) => dist(p.x, p.y, cx, cy));
+    const r = ds.reduce((a, d) => a + d, 0) / ds.length;
+    if (r < CIRCLE_MIN_R) return null;
+    const dev = Math.sqrt(ds.reduce((a, d) => a + (d - r) * (d - r), 0) / ds.length) / r;
+    if (dev > 0.35) return null;
+    let sweep = 0;
+    for (let i = 1; i < path.length; i++) {
+      let da = Math.atan2(path[i].y - cy, path[i].x - cx) - Math.atan2(path[i - 1].y - cy, path[i - 1].x - cx);
+      if (da > Math.PI) da -= Math.PI * 2; else if (da < -Math.PI) da += Math.PI * 2;
+      sweep += da;
+    }
+    return Math.abs(sweep) >= CIRCLE_SWEEP ? { x: cx, y: cy, r } : null;
+  }
+
   function resolveSwipe(path) {
     if (!fighting()) return;
-    const e = fight.enemy, L = fight.layout;
+    const e = fight.enemy;
     // лианы: росчерк поперёк срезает
     for (const v of [...fight.vines]) {
       const base = { x: v.side === 'left' ? 0 : W, y: v.y };
@@ -801,6 +836,10 @@
           break;
         }
       }
+    }
+    if (isLastStage(e) && enemyActive(e)) {
+      const ring = circleGesture(path);
+      if (ring && inBox(enemyBox(), ring.x, ring.y)) { tryCapture(path, ring); return; }
     }
     const hit = [];
     for (let i = 1; i < path.length; i++) {
@@ -828,8 +867,8 @@
     }
     let len = 0;
     for (let i = 1; i < path.length; i++) len += dist(path[i - 1].x, path[i - 1].y, path[i].x, path[i].y);
-    const box = { x0: L.cx - L.dw * 0.32, x1: L.cx + L.dw * 0.32, y0: L.top + L.dh * 0.08, y1: L.bottom - 20 };
-    const crosses = path.some((p) => p.x > box.x0 && p.x < box.x1 && p.y > box.y0 && p.y < box.y1);
+    const box = enemyBox();
+    const crosses = path.some((p) => inBox(box, p.x, p.y));
     if (len >= 90 && crosses) heroSlash(path);
     else if (hit.length === 1) floatText(hit[0].x, hit[0].y - 30, t('fight.needTwo'), '#ffe9a8', 20);
   }
@@ -849,26 +888,6 @@
     if (f.tipT > 0) f.tipT -= dt;
     if (f.banner) { f.banner.t += dt; if (f.banner.t > f.banner.life) f.banner = null; }
 
-    const e = f.enemy;
-    if (e.state === 'subdued') {
-      const holding = input.down && !input.swiping && f.t - input.downT > 0.18;
-      if (holding && f.hero.seals > 0) {
-        e.capture += dt / CAPTURE_TIME;
-        if (e.capture >= 1) capture();
-      } else {
-        e.capture = Math.max(0, e.capture - dt * 1.5);
-        e.st -= dt;
-        if (e.st <= 0) {
-          e.state = 'idle'; e.nextAttack = rand(0.8, 1.2); e.stam = e.stamMax * 0.6;
-          if (e.kind !== 'boss' && !e.lastStand) {
-            e.lastStand = true;
-            e.atk.interval = e.atk.interval.map((v) => v * 2);   // без брони атакует вдвое реже
-          }
-          floatText(f.layout.cx, f.layout.chestY - 40, t('fight.recovered'), '#ff9a7a', 28);
-          tip(t('tip.recovered'));
-        }
-      }
-    }
     if (f.over && !f.resultShown && f.overT > 1.4) { f.resultShown = true; showResult(); }
   }
 
@@ -898,7 +917,7 @@
     a.sy = lerp(a.sy, 1, Math.min(1, rdt * 14));
     if (e.state === 'leaving') { e.st += rdt; return; }
     if (dt === 0) return;
-    if (e.state !== 'subdued' && e.state !== 'stun' && fight.t - e.lastStamHit > 2) e.stam = Math.min(e.stamMax, e.stam + ed.stamRegen * dt);
+    if (e.state !== 'stun' && fight.t - e.lastStamHit > 2) e.stam = Math.min(e.stamMax, e.stam + ed.stamRegen * dt);
     if (e.burn > 0 && enemyActive(e)) {
       e.burn -= dt; e.burnTick += dt;
       e.hp = Math.max(0, e.hp - e.burnDps * dt);
@@ -1009,7 +1028,7 @@
     drawVines();
     drawSpheres();
     drawFx();
-    drawCapture();
+    drawCaptureHint();
     ctx.restore();
     drawHurtOverlay();
     drawTopHud();
@@ -1051,17 +1070,12 @@
       ctx.globalAlpha = alpha * (0.12 + 0.3 * p) * (0.75 + 0.25 * Math.sin(G.time * 24));
       ctx.drawImage(st.red, dx, dy, L.dw, L.dh);
     }
-    if (e.state === 'subdued') {
-      ctx.globalAlpha = alpha * (0.18 + 0.08 * Math.sin(G.time * 4));
-      ctx.drawImage(st.dark, dx, dy, L.dw, L.dh);
-    }
     if (a.white > 0) {
       ctx.globalAlpha = alpha * a.white;
       ctx.drawImage(st.white, dx, dy, L.dw, L.dh);
     }
     ctx.restore();
     if (e.state === 'stun') drawStars(L.cx, L.top + 30);
-    if (e.state === 'subdued') drawChains(L);
     if (e.burn > 0 && enemyActive(e)) {
       for (let i = 0; i < 2; i++) burstAt(L.cx + rand(-L.dw * 0.25, L.dw * 0.25), L.chestY + rand(-60, 120));
     }
@@ -1077,31 +1091,6 @@
       const a = G.time * 4 + i * 2.1;
       ctx.fillText('✦', x + Math.cos(a) * 46, y + Math.sin(a) * 12);
     }
-    ctx.restore();
-  }
-
-  function drawChains(L) {
-    const e = fight.enemy;
-    ctx.save();
-    const y = L.chestY + 30;
-    const glow = 0.5 + 0.5 * Math.sin(G.time * 5);
-    ctx.strokeStyle = `rgba(233,194,122,${0.45 + 0.35 * glow})`;
-    ctx.lineWidth = 3;
-    for (let i = -1; i <= 1; i += 2) {
-      ctx.beginPath();
-      for (let k = 0; k <= 12; k++) {
-        const t = k / 12;
-        const px = L.cx + i * (240 - t * 160), py = y - 120 + t * 160 + Math.sin(t * 6 + G.time * 3) * 6;
-        k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-      }
-      ctx.stroke();
-    }
-    ctx.fillStyle = 'rgba(16,12,20,.75)';
-    roundRect(L.cx - 120, L.top + 6, 240, 30, 15); ctx.fill();
-    ctx.fillStyle = '#e9c27a';
-    roundRect(L.cx - 116, L.top + 10, 232 * clamp(e.st / SUBDUE_WINDOW, 0, 1), 22, 11); ctx.fill();
-    ctx.fillStyle = '#1a1208'; ctx.font = '600 14px ' + bodyFont; ctx.textAlign = 'center';
-    ctx.fillText(t('hud.subdued'), L.cx, L.top + 26);
     ctx.restore();
   }
 
@@ -1312,18 +1301,26 @@
     ctx.restore();
   }
 
-  function drawCapture() {
-    const e = fight.enemy;
-    if (e.state !== 'subdued' || e.capture <= 0) return;
-    const L = fight.layout;
-    const x = input.down ? input.x : L.cx, y = input.down ? input.y : L.chestY;
+  // Без брони: над противницей — шанс захвата кругом (или «нет печатей»)
+  function drawCaptureHint() {
+    const f = fight, e = f.enemy, L = f.layout;
+    if (f.over || !isLastStage(e)) return;
+    const seals = f.hero.seals > 0;
+    const p = Math.round(captureChance(e) * 100);
+    const text = seals ? t('hud.captureChance', { p }) : t('hud.noSeals');
     ctx.save();
-    ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(16,12,20,.7)';
-    ctx.beginPath(); ctx.arc(x, y, 56, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = '#e9c27a'; ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.arc(x, y, 56, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * e.capture); ctx.stroke();
-    ctx.fillStyle = '#e9c27a'; ctx.font = `700 18px ${displayFont}`; ctx.textAlign = 'center';
-    ctx.fillText(t('hud.capture'), x, y - 70);
+    ctx.font = `700 15px ${bodyFont}`;
+    const w = ctx.measureText(text).width + 46, hh = 28;
+    const x = L.cx - w / 2, y = Math.max(HUD_TOP + 6, L.top - 4);
+    const glow = seals ? 0.55 + 0.45 * Math.sin(G.time * 4) * (p / 70) : 0;
+    ctx.fillStyle = 'rgba(16,12,20,.82)'; roundRect(x, y, w, hh, hh / 2); ctx.fill();
+    ctx.strokeStyle = seals ? `rgba(233,194,122,${0.5 + 0.5 * glow})` : 'rgba(185,174,156,.4)'; ctx.lineWidth = 1.5;
+    roundRect(x, y, w, hh, hh / 2); ctx.stroke();
+    // значок: пунктирный круг
+    ctx.setLineDash([3, 3]); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x + 17, y + hh / 2, 7, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = seals ? '#e9c27a' : '#b9ae9c'; ctx.textAlign = 'left';
+    ctx.fillText(text, x + 31, y + 19);
     ctx.restore();
   }
 
@@ -1558,9 +1555,9 @@
   function contextTip() {
     const f = fight, e = f.enemy;
     if (f.over) return '';
-    if (e.state === 'subdued') return f.hero.seals > 0 ? t('ctx.subdue') : t('ctx.subdueNoSeals');
     if (e.state === 'telegraph') return t('ctx.tel');
     if (f.vines.length) return f.hazard.short;
+    if (isLastStage(e)) return f.hero.seals > 0 ? t('ctx.capture') : t('ctx.captureNoSeals');
     if (tired(e)) return t('ctx.tired');
     if (f.spheres.length >= 2) return t('ctx.spheres');
     return t('ctx.default');
@@ -1570,8 +1567,9 @@
     if (!input.down || !input.swiping || input.path.length < 2) return;
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    const pts = input.path.slice(-36);
-    const col = '200,240,255';
+    const capturing = fighting() && isLastStage(fight.enemy) && fight.hero.seals > 0;
+    const pts = capturing ? input.path : input.path.slice(-36);     // круг захвата виден целиком
+    const col = capturing ? '255,214,140' : '200,240,255';
     for (let i = 1; i < pts.length; i++) {
       const k = i / pts.length;
       ctx.strokeStyle = `rgba(${col},${k})`;
@@ -1947,7 +1945,7 @@
     showPanel({ kicker: node.type === 'elite' ? t('reward.eliteKicker') : t('reward.kicker'), title: resultTitle(f.outcome), img: spriteFor(f.ed, f.enemy.stage), text: lines.join('\n'), choices });
   }
 
-  function resultTitle(o) { return ['captured', 'finished', 'defeated', 'escaped', 'lose'].includes(o) ? t('res.' + o) : ''; }
+  function resultTitle(o) { return ['captured', 'defeated', 'escaped', 'lose'].includes(o) ? t('res.' + o) : ''; }
 
   function grantXp(x) {
     const rh = run.hero;
@@ -2295,6 +2293,7 @@
       [t('st.combo'), h.maxCombo], [t('st.taken'), Math.round(s.taken)]
     ];
     if (s.vines) items.push([f.hazard.stat, s.vines]);
+    if (s.captureTries) items.push([t('st.captures'), `${s.captures} / ${s.captureTries}`]);
     $('#resStats').innerHTML = items.map(([k, v, note, wide]) =>
       `<div class="stat${wide ? ' wide' : ''}"><div class="k">${k}</div><div class="v">${v}${note ? ` <span style="font-size:.6em;color:var(--ink-dim)">${note}</span>` : ''}</div></div>`).join('');
     const inRun = f.inRun && run;
@@ -2371,7 +2370,7 @@
     const stages = [];
     for (const src of data.sprites) {
       const img = await loadImage(src);
-      stages.push({ img, white: tinted(img, '#ffffff'), red: tinted(img, '#ff2a2a'), dark: tinted(img, '#0a0610'), w: img.naturalWidth, h: img.naturalHeight });
+      stages.push({ img, white: tinted(img, '#ffffff'), red: tinted(img, '#ff2a2a'), w: img.naturalWidth, h: img.naturalHeight });
     }
     assets[id] = { stages };
     D.enemies[id] = data;
@@ -2396,6 +2395,14 @@
     get fight() { return fight; }, get run() { return run; },
     startFight: startTraining, startRun, chooseDoor, heroTap, resolveSwipe,
     press: (x, y) => onPress({ x, y }, 99), move: (x, y) => onMove({ x, y }, 99), release: () => onRelease(99),
+    // начертить круг жестом (как пальцем): центр, радиус, доля оборота
+    circle: (cx, cy, r, turns = 1.05) => {
+      const n = Math.max(24, Math.round(r * turns / 3));
+      onPress({ x: cx + r, y: cy }, 99);
+      for (let i = 1; i <= n; i++) { const a = i / n * turns * Math.PI * 2; onMove({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }, 99); }
+      onRelease(99);
+    },
+    captureChance: () => (fight ? captureChance(fight.enemy) : 0),
     guardCenter: () => guardCenter(),
     next: afterRunFight
   };

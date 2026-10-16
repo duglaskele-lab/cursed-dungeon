@@ -11,7 +11,7 @@
   - экран и сохранение (`SAVE_KEY`, localStorage), звук (`sfx`, синтез Web Audio), ассеты;
   - псевдо-3D фон: `THEMES`, `buildTheme`, `drawBackground` (темы `dungeon`, `spirit`, `jungle`);
   - бой: `newFight`, `heroTap`, `heroSlash`, `guardPress`/`enemyImpact` (защита нажатием в круг удара),
-    `tryBreak`/`breakArmor`/`subdue`/`capture`, сферы `spawnSpheres`/`sphereBurst`/`resolveSwipe`,
+    `tryBreak`/`breakArmor`, захват кругом `circleGesture`/`tryCapture`/`capture`, сферы `spawnSpheres`/`sphereBurst`/`resolveSwipe`,
     помехи босса `HAZARDS` + `spawnVine`/`updateVines`/`drawVines`/`drawWisps`;
   - отрисовка боя: `renderFight`, `drawTopHud`, `drawBottomHud`;
   - забег: `genFloor`, `renderMap`/`drawDoor`/`drawMiniMap`, `enterNode`, `afterRunFight`, `EVENTS`, `showRest`;
@@ -27,10 +27,12 @@
 
 - Броня: `armor` в данных = число частей; спрайтов может быть меньше (`spriteIndex`).
 - Фазы босса = `armor + 1`, меняются на каждой сломанной части (`applyPhase`).
+- Без брони (`isLastStage`) урон ×`D.broken.dmgMul`, противница не сдаётся: бой до 0 здоровья (`defeated`)
+  или до захвата кругом (шанс `captureChance`, неудача = `heroSlash`). Здоровье кончилось раньше брони — `escaped`.
 - Цели длительности боя: рядовой равного уровня 25–60 с (не дольше 2 мин), слабее героя 10–25 с,
   сильнее 1–2 мин, мини-босс ~1 мин, босс 3–5 мин.
 - Любой текст для игрока — только через `t()`: новый ключ добавлять сразу в оба файла `js/lang/*.js`.
   Не называть локальные переменные `t` в функциях, где вызывается перевод.
 - Репозиторий публичный: только безопасные (R) спрайты.
 - Проверка: headless Chromium через Playwright, хук `window.__proto` (`startFight`, `startRun`,
-  `press/move/release`, `guardCenter`, `chooseDoor`).
+  `press/move/release`, `circle`, `captureChance`, `guardCenter`, `chooseDoor`).
