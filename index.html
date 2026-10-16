@@ -206,57 +206,58 @@
 <div id="stage">
   <canvas id="game"></canvas>
 
-  <div id="loading" class="overlay">Загрузка…</div>
+  <div id="loading" class="overlay" data-i18n="loading">Загрузка…</div>
 
   <div id="menu" class="overlay hidden">
-    <h1>Проклятое подземелье</h1>
-    <div class="sub">Прототип · v0.5</div>
+    <h1 data-i18n="title">Проклятое подземелье</h1>
+    <div class="sub" data-i18n="menu.sub">Прототип · v0.5</div>
 
-    <button class="btn big" id="runBtn">Начать забег</button>
-    <div class="hint">Этаж 1: подъём из темницы — комнаты с развилками, события, привал, элита и босс.<br>Герой начинает с 1-го уровня, пойманные спутницы остаются навсегда.</div>
+    <button class="btn big" id="runBtn" data-i18n="menu.run">Начать забег</button>
+    <div class="hint" data-i18n-html="menu.runHint"></div>
 
-    <div class="section-title">Тренировочный бой</div>
+    <div class="section-title" data-i18n="menu.training">Тренировочный бой</div>
     <div class="cards" id="cards"></div>
     <div class="levels">
-      <div class="stepper"><div class="lbl">Герой</div><div class="row"><button class="round" data-step="hero:-1">−</button><div class="val" id="lvHero">1</div><button class="round" data-step="hero:1">+</button></div></div>
-      <div class="stepper"><div class="lbl">Противница</div><div class="row"><button class="round" data-step="enemy:-1">−</button><div class="val" id="lvEnemy">1</div><button class="round" data-step="enemy:1">+</button></div></div>
+      <div class="stepper"><div class="lbl" data-i18n="menu.hero">Герой</div><div class="row"><button class="round" data-step="hero:-1">−</button><div class="val" id="lvHero">1</div><button class="round" data-step="hero:1">+</button></div></div>
+      <div class="stepper"><div class="lbl" data-i18n="menu.enemy">Противница</div><div class="row"><button class="round" data-step="enemy:-1">−</button><div class="val" id="lvEnemy">1</div><button class="round" data-step="enemy:1">+</button></div></div>
     </div>
     <div class="hint" id="lvHint"></div>
-    <button class="btn ghost" id="startBtn">Тренировка</button>
-    <button class="btn ghost" id="editorBtn">Редактор противниц</button>
-    <div class="hint">Добавьте свою героиню: загрузите лист со стадиями, задайте характеристики и сразу проверьте в бою.</div>
+    <button class="btn ghost" id="startBtn" data-i18n="menu.start">Тренировка</button>
+    <button class="btn ghost" id="editorBtn" data-i18n="menu.editor">Редактор противниц</button>
+    <div class="hint" data-i18n="menu.editorHint"></div>
 
-    <div class="section-title">Управление</div>
+    <div class="section-title" data-i18n="menu.controls">Управление</div>
     <ul class="controls">
-      <li><b>Тап</b><span>Удар. Тратит выносливость — при спаме наступает одышка.</span></li>
-      <li><b>Пауза</b><span>Не бей 0,6 с — следующий удар заряжается до ×2,5.</span></li>
-      <li><b>Круг удара</b><span>Во время замаха на противнице появляется круг. Нажми в него, когда кольцо зелёное — парирование. Держи палец в круге в момент удара — блок. Нажатия и росчерки по кругу не ранят её.</span></li>
-      <li><b>Росчерк</b><span>Проведи по противнице — рассечение, использует заряд.</span></li>
-      <li><b>Росчерк по сферам</b><span>Соедини две и более сферы — противница теряет выносливость.</span></li>
-      <li><b>Броня</b><span>Выносливость ниже 30% — заряженный удар или росчерк ломает часть брони.</span></li>
-      <li><b>Сломлена</b><span>Удерживай палец на ней — захват. Тап — добить.</span></li>
+      <li><b data-i18n="ctl.tap.k"></b><span data-i18n="ctl.tap.v"></span></li>
+      <li><b data-i18n="ctl.pause.k"></b><span data-i18n="ctl.pause.v"></span></li>
+      <li><b data-i18n="ctl.guard.k"></b><span data-i18n="ctl.guard.v"></span></li>
+      <li><b data-i18n="ctl.slash.k"></b><span data-i18n="ctl.slash.v"></span></li>
+      <li><b data-i18n="ctl.spheres.k"></b><span data-i18n="ctl.spheres.v"></span></li>
+      <li><b data-i18n="ctl.armor.k"></b><span data-i18n="ctl.armor.v"></span></li>
+      <li><b data-i18n="ctl.subdued.k"></b><span data-i18n="ctl.subdued.v"></span></li>
     </ul>
 
-    <div class="section-title">Пойманные спутницы</div>
+    <div class="section-title" data-i18n="menu.collection">Пойманные спутницы</div>
     <div class="log" id="collection"></div>
 
-    <div class="section-title">Последние бои</div>
+    <div class="section-title" data-i18n="menu.log">Последние бои</div>
     <div class="log" id="log"></div>
 
     <div class="foot">
+      <button class="link" id="langBtn" data-i18n="lang.other">English</button>
       <button class="link" id="soundBtn">Звук: вкл</button>
-      <button class="link" id="resetBtn">Сбросить сохранение</button>
+      <button class="link" id="resetBtn" data-i18n="menu.reset">Сбросить сохранение</button>
     </div>
   </div>
 
   <div id="result" class="overlay hidden">
-    <h1 id="resTitle">Захвачена!</h1>
+    <h1 id="resTitle"></h1>
     <div class="sub" id="resSub"></div>
     <div class="stats" id="resStats"></div>
     <div class="btn-row">
-      <button class="btn hidden" id="nextBtn">Дальше</button>
-      <button class="btn" id="againBtn">Ещё раз</button>
-      <button class="btn ghost" id="menuBtn">В меню</button>
+      <button class="btn hidden" id="nextBtn" data-i18n="res.next">Дальше</button>
+      <button class="btn" id="againBtn" data-i18n="res.again">Ещё раз</button>
+      <button class="btn ghost" id="menuBtn" data-i18n="toMenu">В меню</button>
     </div>
   </div>
 
@@ -273,18 +274,22 @@
   <div id="editor" class="overlay hidden"></div>
 
   <div id="pause" class="overlay hidden">
-    <h1>Пауза</h1>
+    <h1 data-i18n="pause.title">Пауза</h1>
     <div class="btn-row" style="flex-direction:column;align-items:center">
-      <button class="btn" id="resumeBtn">Продолжить</button>
+      <button class="btn" id="resumeBtn" data-i18n="pause.resume">Продолжить</button>
       <button class="btn ghost" id="pauseSoundBtn">Звук: вкл</button>
-      <button class="btn ghost" id="quitBtn">Выйти в меню</button>
+      <button class="btn ghost" id="quitBtn" data-i18n="pause.quit">Выйти в меню</button>
     </div>
   </div>
 
-  <button id="pauseBtn" class="hidden" aria-label="Пауза">II</button>
+  <button id="pauseBtn" class="hidden" aria-label="Пауза" data-i18n-aria="pause.title">II</button>
 </div>
 
 <script src="js/data.js"></script>
+<!-- тексты интерфейса и переводы: js/lang/*.js, переключение — js/i18n.js -->
+<script src="js/lang/ru.js"></script>
+<script src="js/lang/en.js"></script>
+<script src="js/i18n.js"></script>
 <!-- локальный пакет спрайтов: packs/pack.js не хранится в git (см. packs/README.md) -->
 <script src="packs/pack.js" onerror="this.remove()"></script>
 <script src="js/game.js"></script>

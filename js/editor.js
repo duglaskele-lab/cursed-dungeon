@@ -5,6 +5,7 @@
   const CD = window.CD;
   if (!CD) return;
   const D = CD.D;
+  const t = window.I18N.t;
   const $ = (s, root = document) => root.querySelector(s);
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -17,12 +18,12 @@
   function openDB() {
     if (dbPromise) return dbPromise;
     dbPromise = new Promise((res, rej) => {
-      if (!window.indexedDB) { rej(new Error('IndexedDB недоступна')); return; }
+      if (!window.indexedDB) { rej(new Error(t('ed.noIdb'))); return; }
       const r = indexedDB.open(DB_NAME, 1);
       r.onupgradeneeded = () => r.result.createObjectStore(STORE, { keyPath: 'id' });
       r.onsuccess = () => res(r.result);
       r.onerror = () => rej(r.error);
-    }).catch((e) => { persistent = false; console.warn('Свои противницы будут храниться только до перезагрузки:', e); return null; });
+    }).catch((e) => { persistent = false; console.warn(t('ed.memWarn'), e); return null; });
     return dbPromise;
   }
   function tx(db, mode, fn) {
@@ -58,7 +59,7 @@
 
   // ================================================================ обработка спрайтов
   function loadImg(src) {
-    return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Не удалось открыть картинку')); i.src = src; });
+    return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error(t('ed.imgErr'))); i.src = src; });
   }
   function readFile(file) {
     return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(file); });
@@ -170,7 +171,7 @@
       segs.splice(bi + 1, 1);
     }
     if (segs.length < n) {
-      warn = `Нашлось ${segs.length} фигур вместо ${n} — фигуры касаются друг друга. Лист разрезан на равные части, проверьте результат.`;
+      warn = t('ed.splitWarn', { found: segs.length, n });
       const x0 = segs.length ? segs[0][0] : 0, x1 = segs.length ? segs[segs.length - 1][1] : w;
       const step = (x1 - x0) / n;
       segs = Array.from({ length: n }, (_, i) => [Math.round(x0 + i * step), Math.round(x0 + (i + 1) * step)]);
@@ -241,7 +242,7 @@
       if (!i) return c;
       const r = bestShift(m0, smallMask(c, S), 10);
       const dx = r.dx * S, dy = Math.abs(r.dy) <= 1 ? 0 : r.dy * S;
-      notes.push(`стадия ${i + 1}: сдвиг ${dx}, ${dy} · совпадение ${(r.score * 100).toFixed(0)}%`);
+      notes.push(t('ed.alignNote', { i: i + 1, dx, dy, pct: (r.score * 100).toFixed(0) }));
       if (!dx && !dy) return c;
       const n = document.createElement('canvas'); n.width = Wc; n.height = H;
       n.getContext('2d').drawImage(c, dx, dy);
@@ -268,30 +269,30 @@
 
   // ================================================================ данные и форма
   const FIELDS = [
-    { k: 'name', label: 'Имя', type: 'text' },
-    { k: 'id', label: 'ID (латиница, для файлов)', type: 'text' },
-    { k: 'subtitle', label: 'Подпись', type: 'text', full: true },
-    { k: 'about', label: 'Описание (видно в меню)', type: 'area', full: true },
-    { k: 'kind', label: 'Тип', type: 'select', options: [['normal', 'Обычная'], ['elite', 'Элита'], ['boss', 'Босс']] },
-    { k: 'xp', label: 'Опыт за победу', type: 'num', step: 5 },
-    { k: 'armor', label: 'Частей брони', type: 'num', step: 1 },
-    { k: 'chest', label: 'Высота груди (доля роста, 0.5–0.8)', type: 'num', step: 0.02 },
-    { k: 'hp', label: 'Здоровье (1 ур.)', type: 'num', step: 50 },
-    { k: 'stamina', label: 'Выносливость (1 ур.)', type: 'num', step: 10 },
-    { k: 'stamRegen', label: 'Восст. выносливости /с', type: 'num', step: 1 },
-    { k: 'attack.dmg', label: 'Урон удара', type: 'num', step: 1 },
-    { k: 'attack.telegraph', label: 'Замах, с', type: 'num', step: 0.05 },
-    { k: 'attack.follow', label: 'Замах в серии, с', type: 'num', step: 0.05 },
-    { k: 'attack.interval', label: 'Пауза между атаками, с', type: 'pair', step: 0.1 },
-    { k: 'attack.strikes', label: 'Ударов в серии', type: 'pair', step: 1 },
-    { k: 'spheres.every', label: 'Сферы каждые, с', type: 'pair', step: 0.5 },
-    { k: 'spheres.count', label: 'Сфер за раз', type: 'pair', step: 1 },
-    { k: 'spheres.grow', label: 'Сфера растёт, с', type: 'pair', step: 0.1 },
-    { k: 'spheres.elements', label: 'Стихии сфер', type: 'elements', full: true },
-    { k: 'rage', label: 'Ярость: после поломки брони атакует чаще', type: 'check', full: true },
-    { k: 'bossVines', label: 'Босс: помехи со 2-й фазы (тянутся к центру, срезаются росчерком)', type: 'check', full: true, boss: true },
-    { k: 'hazard', label: 'Босс: вид помех', type: 'select', options: [['wisps', 'Призрачные огоньки'], ['vines', 'Лианы']], boss: true },
-    { k: 'intro', label: 'Босс: реплика перед боем', type: 'area', full: true, boss: true }
+    { k: 'name', label: t('ed.f.name'), type: 'text' },
+    { k: 'id', label: t('ed.f.id'), type: 'text' },
+    { k: 'subtitle', label: t('ed.f.subtitle'), type: 'text', full: true },
+    { k: 'about', label: t('ed.f.about'), type: 'area', full: true },
+    { k: 'kind', label: t('ed.f.kind'), type: 'select', options: [['normal', t('kind.normal')], ['elite', t('kind.elite')], ['boss', t('kind.boss')]] },
+    { k: 'xp', label: t('ed.f.xp'), type: 'num', step: 5 },
+    { k: 'armor', label: t('ed.f.armor'), type: 'num', step: 1 },
+    { k: 'chest', label: t('ed.f.chest'), type: 'num', step: 0.02 },
+    { k: 'hp', label: t('ed.f.hp'), type: 'num', step: 50 },
+    { k: 'stamina', label: t('ed.f.stamina'), type: 'num', step: 10 },
+    { k: 'stamRegen', label: t('ed.f.stamRegen'), type: 'num', step: 1 },
+    { k: 'attack.dmg', label: t('ed.f.dmg'), type: 'num', step: 1 },
+    { k: 'attack.telegraph', label: t('ed.f.telegraph'), type: 'num', step: 0.05 },
+    { k: 'attack.follow', label: t('ed.f.follow'), type: 'num', step: 0.05 },
+    { k: 'attack.interval', label: t('ed.f.interval'), type: 'pair', step: 0.1 },
+    { k: 'attack.strikes', label: t('ed.f.strikes'), type: 'pair', step: 1 },
+    { k: 'spheres.every', label: t('ed.f.sphEvery'), type: 'pair', step: 0.5 },
+    { k: 'spheres.count', label: t('ed.f.sphCount'), type: 'pair', step: 1 },
+    { k: 'spheres.grow', label: t('ed.f.sphGrow'), type: 'pair', step: 0.1 },
+    { k: 'spheres.elements', label: t('ed.f.elements'), type: 'elements', full: true },
+    { k: 'rage', label: t('ed.f.rage'), type: 'check', full: true },
+    { k: 'bossVines', label: t('ed.f.bossVines'), type: 'check', full: true, boss: true },
+    { k: 'hazard', label: t('ed.f.hazard'), type: 'select', options: [['wisps', t('ed.f.wisps')], ['vines', t('ed.f.vines')]], boss: true },
+    { k: 'intro', label: t('ed.f.intro'), type: 'area', full: true, boss: true }
   ];
   const getPath = (o, p) => p.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
   function setPath(o, p, v) {
@@ -320,12 +321,12 @@
   }
 
   function makePhases(d, n) {
-    const ph = [{ title: d.name, sub: 'Фаза 1' }];
+    const ph = [{ title: d.name, sub: t('ed.ph1') }];
     for (let i = 1; i < n; i++) {
       const k = Math.pow(0.88, i);
       const p = {
-        title: `Фаза ${i + 1} — ${i === n - 1 ? 'Ярость' : 'Натиск'}`,
-        sub: i === n - 1 ? 'Без брони: быстрее и злее' : 'Серии ударов',
+        title: t('ed.phN', { n: i + 1, name: t(i === n - 1 ? 'ed.phRage' : 'ed.phPush') }),
+        sub: t(i === n - 1 ? 'ed.phRageSub' : 'ed.phPushSub'),
         attack: {
           strikes: [Math.max(2, d.attack.strikes[0]), Math.max(3, d.attack.strikes[1])],
           interval: d.attack.interval.map((v) => +(v * k).toFixed(2)),
@@ -345,64 +346,64 @@
   const state = { editingId: null, images: [], source: null, tempId: null, dirty: false, list: [] };
 
   root.innerHTML = `
-    <h1>Редактор противниц</h1>
-    <div class="sub" id="edPersist">Свои героини сохраняются в этом браузере</div>
-    <div class="section-title">Мои противницы</div>
+    <h1>${t('menu.editor')}</h1>
+    <div class="sub" id="edPersist">${t('ed.persist')}</div>
+    <div class="section-title">${t('ed.mine')}</div>
     <div class="ed-list" id="edList"></div>
     <div class="btn-row">
-      <button class="btn" id="edNew">Новая противница</button>
-      <button class="btn ghost" id="edImport">Загрузить набор</button>
+      <button class="btn" id="edNew">${t('ed.new')}</button>
+      <button class="btn ghost" id="edImport">${t('ed.import')}</button>
     </div>
     <input type="file" id="edImportFile" accept=".json,application/json" hidden>
 
     <div id="edForm" class="hidden">
-      <div class="section-title">1. Спрайты стадий</div>
+      <div class="section-title">${t('ed.s1')}</div>
       <div class="ed-grid">
-        <label class="ed-file full">Лист со всеми стадиями в ряд<br><b>выбрать файл</b><input type="file" id="edSheet" accept="image/*"></label>
-        <label class="ed-file full">…или отдельные картинки стадий по порядку<br><b>выбрать файлы</b><input type="file" id="edFiles" accept="image/*" multiple></label>
-        <label class="ed-f">Стадий на листе
+        <label class="ed-file full">${t('ed.sheet')}<input type="file" id="edSheet" accept="image/*"></label>
+        <label class="ed-file full">${t('ed.files')}<input type="file" id="edFiles" accept="image/*" multiple></label>
+        <label class="ed-f">${t('ed.stages')}
           <select id="edStages"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
-        <label class="ed-f">Фон
-          <select id="edBg"><option value="auto">определить сам</option><option value="black">чёрный</option><option value="white">белый</option></select></label>
-        <label class="ed-f">Допуск фона: <span id="edTolV">6</span>
+        <label class="ed-f">${t('ed.bg')}
+          <select id="edBg"><option value="auto">${t('ed.bgAuto')}</option><option value="black">${t('ed.bgBlack')}</option><option value="white">${t('ed.bgWhite')}</option></select></label>
+        <label class="ed-f">${t('ed.tol')} <span id="edTolV">6</span>
           <input type="range" id="edTol" min="2" max="40" value="6"></label>
-        <label class="ed-f">Мин. просвет (пикс.): <span id="edHoleV">400</span>
+        <label class="ed-f">${t('ed.hole')} <span id="edHoleV">400</span>
           <input type="range" id="edHole" min="50" max="5000" step="50" value="400"></label>
       </div>
-      <div class="ed-note">Стадии — от целой брони к «сломлена». Можно загрузить и один спрайт: частей брони задаётся отдельно, а спрайты меняются по мере поломки. Если по краю остался ореол фона — увеличьте допуск; если пропали тёмные или светлые детали рисунка — уменьшите.</div>
-      <button class="btn ghost" id="edProcess">Обработать заново</button>
+      <div class="ed-note">${t('ed.spritesNote')}</div>
+      <button class="btn ghost" id="edProcess">${t('ed.reprocess')}</button>
       <div class="ed-status" id="edStatus"></div>
       <div class="ed-thumbs" id="edThumbs"></div>
 
-      <div class="section-title">2. Характеристики</div>
+      <div class="section-title">${t('ed.s2')}</div>
       <div class="ed-grid">
-        <label class="ed-f full">Взять за основу
+        <label class="ed-f full">${t('ed.template')}
           <select id="edTemplate"></select></label>
       </div>
       <div class="ed-grid" id="edFields" style="margin-top: calc(var(--u)*10)"></div>
 
-      <div class="section-title">3. Где появляется в забеге</div>
+      <div class="section-title">${t('ed.s3')}</div>
       <div class="ed-checks" id="edFloor"></div>
-      <div class="ed-note">Обычные бои — в выбранных слоях этажа. Элита и босс выбираются случайно среди всех отмеченных.</div>
+      <div class="ed-note">${t('ed.floorNote')}</div>
 
-      <div class="section-title">4. Проверка и сохранение</div>
+      <div class="section-title">${t('ed.s4')}</div>
       <div class="ed-grid">
-        <label class="ed-f">Тест: уровень героя<input type="number" id="edTestH" min="1" max="10" value="1"></label>
-        <label class="ed-f">Тест: уровень противницы<input type="number" id="edTestE" min="1" max="10" value="1"></label>
+        <label class="ed-f">${t('ed.testH')}<input type="number" id="edTestH" min="1" max="10" value="1"></label>
+        <label class="ed-f">${t('ed.testE')}<input type="number" id="edTestE" min="1" max="10" value="1"></label>
       </div>
       <div class="btn-row">
-        <button class="btn" id="edSave">Сохранить</button>
-        <button class="btn ghost" id="edTest">Тестовый бой</button>
+        <button class="btn" id="edSave">${t('ed.save')}</button>
+        <button class="btn ghost" id="edTest">${t('ed.test')}</button>
       </div>
       <div class="btn-row">
-        <button class="mini" id="edZip">Экспорт в проект (.zip)</button>
-        <button class="mini" id="edPack">Скачать набор (.json)</button>
-        <button class="mini danger hidden" id="edDelete">Удалить</button>
+        <button class="mini" id="edZip">${t('ed.zip')}</button>
+        <button class="mini" id="edPack">${t('ed.pack')}</button>
+        <button class="mini danger hidden" id="edDelete">${t('ed.delete')}</button>
       </div>
       <div class="ed-status" id="edSaveStatus"></div>
     </div>
 
-    <button class="btn ghost" id="edClose">Назад в меню</button>
+    <button class="btn ghost" id="edClose">${t('ed.close')}</button>
   `;
 
   // поля формы
@@ -417,7 +418,7 @@
     if (f.type === 'num') inner = `<input type="number" step="${f.step}" data-f="${f.k}">`;
     if (f.type === 'area') inner = `<textarea data-f="${f.k}"></textarea>`;
     if (f.type === 'select') inner = `<select data-f="${f.k}">${f.options.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`;
-    if (f.type === 'pair') inner = `<div class="ed-pair"><input type="number" step="${f.step}" data-f="${f.k}.0" title="от"><input type="number" step="${f.step}" data-f="${f.k}.1" title="до"></div>`;
+    if (f.type === 'pair') inner = `<div class="ed-pair"><input type="number" step="${f.step}" data-f="${f.k}.0" title="${t('ed.from')}"><input type="number" step="${f.step}" data-f="${f.k}.1" title="${t('ed.to')}"></div>`;
     if (f.type === 'elements') inner = `<div class="ed-checks">${Object.entries(D.elements).map(([k, e]) => `<label><input type="checkbox" data-el="${k}"><span><b style="color:${e.color};font-weight:600">${e.name}</b> — ${e.effect.toLowerCase()}</span></label>`).join('')}</div>`;
     if (f.type === 'check') {
       const box = document.createElement('div');
@@ -428,16 +429,16 @@
       fieldsBox.appendChild(box);
       continue;
     }
-    wrap.innerHTML = `${f.label}${f.type === 'pair' ? ' (от / до)' : ''}${inner}`;
+    wrap.innerHTML = `${f.label}${f.type === 'pair' ? t('ed.pair') : ''}${inner}`;
     fieldsBox.appendChild(wrap);
   }
   const tplSel = $('#edTemplate', root);
   const floorBox = $('#edFloor', root);
   function fillStatic() {
-    tplSel.innerHTML = '<option value="">— не менять —</option>' + Object.entries(D.enemies)
-      .filter(([id]) => CD.isBuiltin(id)).map(([id, e]) => `<option value="${id}">${esc(e.name)}${e.kind === 'boss' ? ' (босс)' : e.kind === 'elite' ? ' (элита)' : ''}</option>`).join('');
-    floorBox.innerHTML = D.floor.layers.map((L, i) => (L.pool ? `<label><input type="checkbox" data-layer="${i}"> Слой ${i + 1} (ур. ${L.lvl})</label>` : '')).join('')
-      + '<label><input type="checkbox" data-floor="elite"> Элита этажа</label><label><input type="checkbox" data-floor="boss"> Босс этажа</label>';
+    tplSel.innerHTML = `<option value="">${t('ed.keep')}</option>` + Object.entries(D.enemies)
+      .filter(([id]) => CD.isBuiltin(id)).map(([id, e]) => `<option value="${id}">${esc(e.name)}${e.kind === 'boss' ? t('ed.tBoss') : e.kind === 'elite' ? t('ed.tElite') : ''}</option>`).join('');
+    floorBox.innerHTML = D.floor.layers.map((L, i) => (L.pool ? `<label><input type="checkbox" data-layer="${i}"> ${t('ed.layer', { i: i + 1, lvl: L.lvl })}</label>` : '')).join('')
+      + `<label><input type="checkbox" data-floor="elite"> ${t('ed.floorElite')}</label><label><input type="checkbox" data-floor="boss"> ${t('ed.floorBoss')}</label>`;
   }
 
   function setStatus(id, text, cls = '') { const el = $(id, root); el.textContent = text; el.className = 'ed-status' + (cls ? ' ' + cls : ''); }
@@ -502,30 +503,30 @@
     d.sprites = state.images.slice();
     if (d.kind === 'boss') {
       d.phases = makePhases(d, d.armor + 1);
-      d.intro = d.intro || `«${d.name} не выпустит тебя отсюда!»`;
+      d.intro = d.intro || t('ed.defIntro', { name: d.name });
     } else { delete d.phases; }
     return d;
   }
 
   function validate(d) {
-    if (state.images.length < 1) return 'Загрузите и обработайте хотя бы один спрайт.';
-    if (!d.name) return 'Укажите имя.';
-    if (!/^[a-z][a-z0-9_]{1,31}$/.test(d.id || '')) return 'ID: латинские буквы, цифры и _, начинается с буквы.';
-    if (CD.isBuiltin(d.id)) return `ID «${d.id}» занят встроенной противницей — выберите другой.`;
-    if (d.id !== state.editingId && state.list.some((r) => r.id === d.id)) return `ID «${d.id}» уже есть среди ваших противниц.`;
+    if (state.images.length < 1) return t('ed.v.sprite');
+    if (!d.name) return t('ed.v.name');
+    if (!/^[a-z][a-z0-9_]{1,31}$/.test(d.id || '')) return t('ed.v.id');
+    if (CD.isBuiltin(d.id)) return t('ed.v.builtin', { id: d.id });
+    if (d.id !== state.editingId && state.list.some((r) => r.id === d.id)) return t('ed.v.dup', { id: d.id });
     return '';
   }
 
   function renderThumbs() {
     const box = $('#edThumbs', root);
-    box.innerHTML = state.images.map((src, i) => `<figure><img src="${src}" alt=""><figcaption>${state.images.length === 1 ? 'единственный спрайт' : i === 0 ? 'целая' : i === state.images.length - 1 ? 'сломлена' : `стадия ${i + 1}`}</figcaption></figure>`).join('');
+    box.innerHTML = state.images.map((src, i) => `<figure><img src="${src}" alt=""><figcaption>${state.images.length === 1 ? t('ed.th.single') : i === 0 ? t('ed.th.first') : i === state.images.length - 1 ? t('ed.th.last') : t('ed.th.n', { n: i + 1 })}</figcaption></figure>`).join('');
   }
 
   async function processSource() {
     const src = state.source;
-    if (!src) { setStatus('#edStatus', 'Сначала выберите лист или файлы стадий.', 'err'); return; }
+    if (!src) { setStatus('#edStatus', t('ed.needSrc'), 'err'); return; }
     const opts = { bg: $('#edBg', root).value, tol: Number($('#edTol', root).value), hole: Number($('#edHole', root).value) };
-    setStatus('#edStatus', 'Обрабатываю…');
+    setStatus('#edStatus', t('ed.processing'));
     await new Promise((r) => setTimeout(r, 30));
     try {
       let figs, warn = '', bgType = '';
@@ -541,10 +542,10 @@
       state.dirty = true;
       renderThumbs();
       const c0 = canvases[0];
-      setStatus('#edStatus', [`Готово: ${canvases.length} стадий ${c0.width}×${c0.height}, фон — ${bgType === 'white' ? 'белый' : 'чёрный'}.`, ...notes, warn].filter(Boolean).join('\n'), warn ? 'err' : 'ok');
+      setStatus('#edStatus', [t('ed.done', { n: canvases.length, w: c0.width, h: c0.height, bg: t(bgType === 'white' ? 'ed.bgWhite' : 'ed.bgBlack') }), ...notes, warn].filter(Boolean).join('\n'), warn ? 'err' : 'ok');
     } catch (err) {
       console.error(err);
-      setStatus('#edStatus', 'Не получилось обработать: ' + err.message, 'err');
+      setStatus('#edStatus', t('ed.procErr', { msg: err.message }), 'err');
     }
   }
 
@@ -552,7 +553,7 @@
     if (!file) return;
     const img = await loadImg(await readFile(file));
     state.source = { type: 'sheet', imgs: [img] };
-    if (!$('[data-f="name"]', root).value || $('[data-f="name"]', root).value === 'Новая противница') {
+    if (!$('[data-f="name"]', root).value || $('[data-f="name"]', root).value === t('ed.newName')) {
       const base = file.name.replace(/\.[^.]+$/, '').replace(/[_-]?sheet$/i, '');
       $('[data-f="name"]', root).value = base.charAt(0).toUpperCase() + base.slice(1);
       $('[data-f="id"]', root).value = slug(base);
@@ -571,14 +572,15 @@
   async function refreshList() {
     state.list = (await dbAll()).filter((r) => r && r.data);
     const box = $('#edList', root);
-    if (!state.list.length) { box.innerHTML = '<div class="ed-note">Пока нет своих противниц. Нажмите «Новая противница» и загрузите лист со стадиями.</div>'; return; }
+    if (!state.list.length) { box.innerHTML = `<div class="ed-note">${t('ed.empty')}</div>`; return; }
     box.innerHTML = '';
     for (const r of state.list) {
       const d = r.data;
       const row = document.createElement('div');
       row.className = 'ed-item';
-      row.innerHTML = `<img src="${d.sprites[0]}" alt=""><div><div class="nm">${esc(d.name)}</div><div class="ds">${d.kind === 'boss' ? 'Босс' : d.kind === 'elite' ? 'Элита' : 'Обычная'} · брони ${d.armor || d.sprites.length - 1} · спрайтов ${d.sprites.length} · ID ${esc(r.id)}</div></div>
-        <div class="acts"><button class="mini" data-a="edit">Изменить</button><button class="mini" data-a="fight">Бой</button></div>`;
+      const info = t('ed.itemInfo', { kind: t('kind.' + (d.kind === 'boss' || d.kind === 'elite' ? d.kind : 'normal')), armor: d.armor || d.sprites.length - 1, sprites: d.sprites.length, id: esc(r.id) });
+      row.innerHTML = `<img src="${d.sprites[0]}" alt=""><div><div class="nm">${esc(d.name)}</div><div class="ds">${info}</div></div>
+        <div class="acts"><button class="mini" data-a="edit">${t('ed.edit')}</button><button class="mini" data-a="fight">${t('ed.fight')}</button></div>`;
       row.querySelector('[data-a="edit"]').addEventListener('click', () => editRecord(r));
       row.querySelector('[data-a="fight"]').addEventListener('click', () => { leaveForTest(r.id, 1, 1); });
       box.appendChild(row);
@@ -588,11 +590,11 @@
   function newEnemy() {
     state.editingId = null; state.images = []; state.source = null; state.dirty = false;
     const d = templateData(Object.keys(D.enemies).find((k) => CD.isBuiltin(k) && D.enemies[k].kind === 'normal') || Object.keys(D.enemies)[0]);
-    d.name = 'Новая противница'; d.id = ''; d.subtitle = 'Своя героиня'; d.about = 'Описание противницы.'; d.kind = 'normal';
+    d.name = t('ed.newName'); d.id = ''; d.subtitle = t('ed.defSub'); d.about = t('ed.defAbout'); d.kind = 'normal';
     d.floor = { layers: [0, 1], elite: false, boss: false };
     dataToForm(d);
     renderThumbs();
-    setStatus('#edStatus', 'Выберите лист со стадиями (или отдельные файлы).');
+    setStatus('#edStatus', t('ed.pickSheet'));
     setStatus('#edSaveStatus', '');
     $('#edDelete', root).classList.add('hidden');
     $('#edForm', root).classList.remove('hidden');
@@ -603,7 +605,7 @@
     state.editingId = r.id; state.images = r.data.sprites.slice(); state.source = null; state.dirty = false;
     dataToForm({ ...r.data, id: r.id });
     renderThumbs();
-    setStatus('#edStatus', 'Чтобы заменить спрайты, выберите новый лист или файлы.');
+    setStatus('#edStatus', t('ed.replaceHint'));
     setStatus('#edSaveStatus', '');
     $('#edDelete', root).classList.remove('hidden');
     $('#edForm', root).classList.remove('hidden');
@@ -621,13 +623,14 @@
       await dbPut({ id, data: d, savedAt: Date.now() });
       await CD.registerEnemy(id, d);
     } catch (e) {
-      setStatus('#edSaveStatus', 'Не удалось сохранить: ' + e.message, 'err');
+      setStatus('#edSaveStatus', t('ed.saveErr', { msg: e.message }), 'err');
       return null;
     }
     state.editingId = id; state.tempId = null; state.dirty = false;
     $('#edDelete', root).classList.remove('hidden');
     await refreshList();
-    setStatus('#edSaveStatus', persistent ? `Сохранено. «${d.name}» уже есть в меню тренировки${d.floor.layers.length || d.floor.elite || d.floor.boss ? ' и в забеге' : ''}.` : 'Сохранено только до перезагрузки страницы: браузер не дал доступ к хранилищу. Скачайте набор, чтобы не потерять.', persistent ? 'ok' : 'err');
+    const inRun = d.floor.layers.length || d.floor.elite || d.floor.boss;
+    setStatus('#edSaveStatus', persistent ? t(inRun ? 'ed.savedRun' : 'ed.saved', { name: d.name }) : t('ed.savedMem'), persistent ? 'ok' : 'err');
     return id;
   }
 
@@ -650,7 +653,7 @@
 
   async function del() {
     const id = state.editingId;
-    if (!id || !confirm(`Удалить «${$('[data-f="name"]', root).value}»? Это нельзя отменить.`)) return;
+    if (!id || !confirm(t('ed.confirmDel', { name: $('[data-f="name"]', root).value }))) return;
     await dbDel(id);
     CD.unregisterEnemy(id);
     state.editingId = null;
@@ -718,15 +721,15 @@
       .replace(/\n/g, '\n    ');
     const fl = d.floor;
     const floorLines = [
-      ...fl.layers.map((i) => `//   floor.layers[${i}].pool — добавьте '${id}'`),
-      fl.elite ? `//   floor.elite — добавьте '${id}' (сделайте массивом: ['wolf', '${id}'])` : '',
-      fl.boss ? `//   floor.layers[4].boss — добавьте '${id}' (массивом: ['nekomata', '${id}'])` : ''
+      ...fl.layers.map((i) => t('ed.zip.layer', { i, id })),
+      fl.elite ? t('ed.zip.elite', { id }) : '',
+      fl.boss ? t('ed.zip.boss', { id }) : ''
     ].filter(Boolean);
-    const snippet = `// ${d.name} — запись для js/data.js\n// 1. Скопируйте папку assets/${id} в папку assets игры.\n// 2. Вставьте строку ниже внутрь enemies: { ... } в js/data.js.\n${floorLines.length ? '// 3. Чтобы она появлялась в забеге:\n' + floorLines.join('\n') + '\n' : ''}\n    ${id}: ${json},\n`;
+    const snippet = `${t('ed.zip.h', { name: d.name })}\n${t('ed.zip.s1', { id })}\n${t('ed.zip.s2')}\n${floorLines.length ? t('ed.zip.s3') + '\n' + floorLines.join('\n') + '\n' : ''}\n    ${id}: ${json},\n`;
     const files = d.sprites.map((src, i) => ({ name: `assets/${id}/stage${i + 1}.png`, data: dataUrlBytes(src) }));
     files.push({ name: `${id}.data.js`, data: snippet });
     download(makeZip(files), `${id}.zip`);
-    setStatus('#edSaveStatus', `Скачан ${id}.zip: спрайты и запись для data.js с инструкцией.`, 'ok');
+    setStatus('#edSaveStatus', t('ed.zipDone', { id }), 'ok');
   }
 
   function exportPack() {
@@ -737,14 +740,14 @@
     delete d.id;
     const pack = { format: 'cursed-dungeon-enemies', version: 1, enemies: [{ id, data: d }] };
     download(new Blob([JSON.stringify(pack)], { type: 'application/json' }), `${id}.enemy.json`);
-    setStatus('#edSaveStatus', `Скачан ${id}.enemy.json — его можно загрузить в редактор на другом устройстве.`, 'ok');
+    setStatus('#edSaveStatus', t('ed.packDone', { id }), 'ok');
   }
 
   async function importPack(file) {
     if (!file) return;
     try {
       const pack = JSON.parse(await file.text());
-      if (pack.format !== 'cursed-dungeon-enemies' || !Array.isArray(pack.enemies)) throw new Error('это не набор противниц');
+      if (pack.format !== 'cursed-dungeon-enemies' || !Array.isArray(pack.enemies)) throw new Error(t('ed.notPack'));
       let n = 0;
       for (const r of pack.enemies) {
         if (!r.id || !r.data || !Array.isArray(r.data.sprites) || r.data.sprites.length < 1) continue;
@@ -756,9 +759,9 @@
         n++;
       }
       await refreshList();
-      alert(`Загружено противниц: ${n}`);
+      alert(t('ed.imported', { n }));
     } catch (e) {
-      alert('Не удалось загрузить набор: ' + e.message);
+      alert(t('ed.importErr', { msg: e.message }));
     }
   }
 
@@ -772,8 +775,8 @@
   $('#edTol', root).addEventListener('input', (e) => { $('#edTolV', root).textContent = e.target.value; });
   $('#edHole', root).addEventListener('input', (e) => { $('#edHoleV', root).textContent = e.target.value; });
   $('#edBg', root).addEventListener('change', (e) => {
-    const t = $('#edTol', root);
-    if (e.target.value === 'white' && Number(t.value) < 9) { t.value = 9; $('#edTolV', root).textContent = 9; }
+    const tol = $('#edTol', root);
+    if (e.target.value === 'white' && Number(tol.value) < 9) { tol.value = 9; $('#edTolV', root).textContent = 9; }
     if (e.target.value === 'white' && Number($('#edHole', root).value) < 900) { $('#edHole', root).value = 900; $('#edHoleV', root).textContent = 900; }
   });
   $('[data-f="kind"]', root).addEventListener('change', (e) => {
@@ -792,10 +795,10 @@
   tplSel.addEventListener('change', () => {
     if (!tplSel.value) return;
     const keep = formToData();
-    const t = templateData(tplSel.value);
-    dataToForm({ ...t, name: $('[data-f="name"]', root).value, id: $('[data-f="id"]', root).value, subtitle: keep.subtitle, about: keep.about, floor: keep.floor, intro: keep.intro });
+    const tpl = templateData(tplSel.value);
+    dataToForm({ ...tpl, name: $('[data-f="name"]', root).value, id: $('[data-f="id"]', root).value, subtitle: keep.subtitle, about: keep.about, floor: keep.floor, intro: keep.intro });
     tplSel.value = '';
-    setStatus('#edSaveStatus', 'Характеристики взяты из шаблона. Имя, описание и размещение остались прежними.', 'ok');
+    setStatus('#edSaveStatus', t('ed.tplApplied'), 'ok');
   });
   $('#edSave', root).addEventListener('click', save);
   $('#edTest', root).addEventListener('click', test);
@@ -807,7 +810,7 @@
   async function open() {
     CD.hideAll();
     fillStatic();
-    $('#edPersist', root).textContent = persistent ? 'Свои героини сохраняются в этом браузере' : 'Браузер не дал доступ к хранилищу: сохранения живут до перезагрузки — скачивайте наборы';
+    $('#edPersist', root).textContent = t(persistent ? 'ed.persist' : 'ed.persistNo');
     CD.show(root);
     await refreshList();
   }

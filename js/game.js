@@ -4,6 +4,7 @@
 (function () {
   const W = 540, H = 960;
   const D = window.GAME_DATA;
+  const t = window.I18N.t;
   const $ = (s) => document.querySelector(s);
   const canvas = $('#game');
   const ctx = canvas.getContext('2d');
@@ -131,7 +132,7 @@
     return new Promise((res, rej) => {
       const i = new Image();
       i.onload = () => res(i);
-      i.onerror = () => rej(new Error('Не удалось загрузить ' + src));
+      i.onerror = () => rej(new Error(t('err.load', { src })));
       i.src = src;
     });
   }
@@ -398,7 +399,7 @@
     e.stam = e.stamMax;
     hero.stamPower = levelMod(heroLvl, enemyLvl) * (1 + D.hero.dmgPerLvl * (heroLvl - 1)) * hero.mods.dmgMul;
     if (kind === 'boss' && ed.phases) applyPhase(e, 0, false);
-    const kindLabel = kind === 'boss' ? 'Босс' : kind === 'elite' ? 'Элита' : ed.subtitle;
+    const kindLabel = kind === 'boss' ? t('kind.boss') : kind === 'elite' ? t('kind.elite') : ed.subtitle;
     fight.banner = { title: ed.name, sub: kind === 'boss' ? ed.phases[0].title : kindLabel, t: 0, life: 1.8 };
     resetInput();
   }
@@ -457,8 +458,8 @@
     h.stam -= cost * h.mods.tapCostMul;
     if (h.stam <= 0) {
       h.stam = 0; h.exhausted = true; h.combo = 0;
-      floatText(W / 2, 700, 'Одышка!', '#ff9a7a', 28);
-      tip('Не спамь: пауза восстанавливает выносливость и заряжает удар');
+      floatText(W / 2, 700, t('fight.breath'), '#ff9a7a', 28);
+      tip(t('tip.spam'));
     }
   }
   function enemyStamina(e, amount) {
@@ -490,7 +491,7 @@
     if (!enemyActive(e)) return;
     if (h.shock > 0) {
       h.shock--; h.chargeT = 0;
-      floatText(x, y - 20, 'Шок! Удар сорвался', D.elements.electric.color, 22);
+      floatText(x, y - 20, t('fight.shockTap'), D.elements.electric.color, 22);
       burst(x, y, 10, ['#d9c8ff', '#b48cff'], 200, 0.4, 3, 0);
       sfx.fail();
       return;
@@ -509,7 +510,7 @@
     const ex = (h.exhausted ? 0.2 : 1) * (h.entangled > 0 ? 0.5 : 1);
     const dmg = h.dmg * levelMod(h.lvl, e.lvl) * mult * armorBonus(e) * ex * rand(0.92, 1.08);
     damageEnemy(dmg, x, y - 10, crit ? '#ffd060' : charged ? '#ffb36b' : '#ffffff', charged || crit);
-    if (crit) floatText(x, y - 56, 'КРИТ!', '#ffd060', 30);
+    if (crit) floatText(x, y - 56, t('fight.crit'), '#ffd060', 30);
     enemyStamina(e, (1 + (charged ? 6 * (mult - 1) : 0)) * h.stamPower * ex);
     const a = e.anim;
     a.white = Math.max(a.white, charged ? 0.85 : 0.5);
@@ -533,7 +534,7 @@
     if (e.state === 'subdued') { finishOff(); return; }
     if (!enemyActive(e)) return;
     fight.fx.trails.push({ pts: path.map((p) => ({ x: p.x, y: p.y })), t: 0, life: 0.35, color: '#ffffff', w: 10 });
-    if (h.shock > 0) { h.shock--; h.chargeT = 0; floatText(p1.x, p1.y, 'Шок! Росчерк сорвался', D.elements.electric.color, 22); sfx.fail(); return; }
+    if (h.shock > 0) { h.shock--; h.chargeT = 0; floatText(p1.x, p1.y, t('fight.shockSlash'), D.elements.electric.color, 22); sfx.fail(); return; }
     spendStamina(h, D.hero.slashCost);
     let mult = chargeMult(h);
     h.chargeT = 0;
@@ -543,7 +544,7 @@
     const dmg = h.dmg * 1.3 * levelMod(h.lvl, e.lvl) * mult * armorBonus(e) * ex * rand(0.92, 1.08);
     const mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2;
     damageEnemy(dmg, mx, my - 20, crit ? '#ffd060' : '#9fe3ff', true);
-    floatText(mx, my - 62, crit ? 'РАССЕЧЕНИЕ! КРИТ!' : 'Рассечение', '#bfefff', 24);
+    floatText(mx, my - 62, crit ? t('fight.slashCrit') : t('fight.slash'), '#bfefff', 24);
     enemyStamina(e, (6 + 7 * (mult - 1)) * h.stamPower * ex);
     const a = e.anim;
     a.white = 0.9; a.knock = 1; a.sx = 1.05; a.sy = 0.95;
@@ -589,25 +590,25 @@
     e.anim.white = 1;
     sfx.armor();
     if (isLastStage(e) && e.kind !== 'boss') { subdue(e); return; }
-    floatText(L.cx, L.chestY - 40, 'БРОНЯ СЛОМАНА!', '#ffe2a8', 34, 1.4, -30);
+    floatText(L.cx, L.chestY - 40, t('fight.armorBroken'), '#ffe2a8', 34, 1.4, -30);
     e.state = 'stun'; e.st = 1.5; e.strikesLeft = 0;
     e.stam = e.stamMax * 0.85;
     if (e.kind === 'boss') applyPhase(e, e.stage);
     else if (fight.ed.rage) {
       e.atk.interval = e.atk.interval.map((v) => v * 0.8);
       e.atk.telegraph = Math.max(0.62, e.atk.telegraph * 0.92);
-      fight.banner = { title: 'Ярость!', sub: 'Атакует чаще', t: 0, life: 1.6 };
+      fight.banner = { title: t('fight.rage'), sub: t('fight.rageSub'), t: 0, life: 1.6 };
     }
-    tip('Броня сломана: противница оглушена на 1,5 с, урон по ней +25%');
+    tip(t('tip.armorBroken'));
   }
 
   function subdue(e) {
     const L = fight.layout;
     e.state = 'subdued'; e.st = SUBDUE_WINDOW; e.strikesLeft = 0; e.capture = 0;
-    floatText(L.cx, L.chestY - 40, 'СЛОМЛЕНА!', '#ffd060', 38, 1.6, -25);
+    floatText(L.cx, L.chestY - 40, t('fight.subdued'), '#ffd060', 38, 1.6, -25);
     for (const s of fight.spheres) burst(s.x, s.y, 8, [D.elements[s.el].color], 140, 0.4, 3, 0);
     fight.spheres = []; fight.weak = null; fight.vines = [];
-    tip(fight.hero.seals > 0 ? 'Удерживай палец на ней — захват. Тап — добить' : 'Печатей захвата нет. Тап — добить', 3);
+    tip(fight.hero.seals > 0 ? t('tip.subdue') : t('tip.subdueNoSeals'), 3);
   }
 
   function finishOff() {
@@ -673,7 +674,7 @@
       fight.stats.parries++;
       addCombo(h);
       if (hasRelic(h, 'fang')) h.chargeT = CHARGE_FULL;
-      floatText(L.cx, L.chestY - 30, 'ПАРИРОВАНИЕ!', '#bfefff', 34, 1.1, -40);
+      floatText(L.cx, L.chestY - 30, t('fight.parry'), '#bfefff', 34, 1.1, -40);
       burst(L.cx, L.chestY + 60, 30, ['#ffffff', '#bfefff', '#7fd8ff'], 420, 0.5, 4, 100);
       fight.shake = Math.max(fight.shake, 6);
       sfx.parry();
@@ -688,7 +689,7 @@
       enemyStamina(e, 6 * h.stamPower);
       fight.stats.blocks++;
       addCombo(h);
-      floatText(W / 2, 640, 'Блок  −' + Math.round(taken), '#ffe28a', 26);
+      floatText(W / 2, 640, t('fight.block', { n: Math.round(taken) }), '#ffe28a', 26);
       sfx.block();
       fight.shake = Math.max(fight.shake, 4);
       return;
@@ -698,7 +699,7 @@
     floatText(W / 2, 640, '−' + Math.round(dmg), '#ff6b5e', 34);
     sfx.hurt();
     fight.shake = Math.max(fight.shake, 12);
-    if (fight.stats.parries + fight.stats.blocks < 2) tip('Нажми в круг удара, когда кольцо зелёное — парирование. Держи палец в круге — блок');
+    if (fight.stats.parries + fight.stats.blocks < 2) tip(t('tip.guard'));
   }
 
   function hurtHero(dmg, flash) {
@@ -739,23 +740,24 @@
     fight.shake = Math.max(fight.shake, 6);
     sfx.burst();
     const base = e.atk.dmg * e.dmgScale * levelMod(e.lvl, h.lvl);
-    if (s.el === 'fire') { h.burn = 4; h.burnDps = base * 0.25; floatText(s.x, s.y, 'Горение!', c.color, 24); }
-    if (s.el === 'electric') { h.shock = 3; hurtHero(base * 0.3, true); floatText(s.x, s.y, 'Шок ×3', c.color, 24); }
-    if (s.el === 'ice') { h.chill = 5; hurtHero(base * 0.3, true); floatText(s.x, s.y, 'Холод: заряд медленнее', c.color, 22); }
-    if (s.el === 'ghost') { h.burn = 3; h.burnDps = base * 0.25; h.chill = 3; floatText(s.x, s.y, 'Холодное пламя!', c.color, 24); }
+    if (s.el === 'fire') { h.burn = 4; h.burnDps = base * 0.25; floatText(s.x, s.y, t('sph.burn'), c.color, 24); }
+    if (s.el === 'electric') { h.shock = 3; hurtHero(base * 0.3, true); floatText(s.x, s.y, t('sph.shock'), c.color, 24); }
+    if (s.el === 'ice') { h.chill = 5; hurtHero(base * 0.3, true); floatText(s.x, s.y, t('sph.chill'), c.color, 22); }
+    if (s.el === 'ghost') { h.burn = 3; h.burnDps = base * 0.25; h.chill = 3; floatText(s.x, s.y, t('sph.ghost'), c.color, 24); }
     if (s.el === 'nature') {
       const heal = Math.round(e.hpMax * 0.05);
       e.hp = Math.min(e.hpMax, e.hp + heal);
       floatText(fight.layout.cx, fight.layout.chestY, '+' + heal, c.color, 30);
       fight.fx.links.push({ pts: [{ x: s.x, y: s.y }, { x: fight.layout.cx, y: fight.layout.chestY }], t: 0, life: 0.5, color: c.color });
     }
-    tip('Соединяй сферы росчерком, пока они не выросли');
+    tip(t('tip.spheres'));
   }
 
   // помехи босса: тянутся от края к центру, срезаются росчерком поперёк
+  const hazardTexts = (k) => Object.fromEntries(['cut', 'status', 'hit', 'guardOff', 'tip', 'short', 'stat'].map((f) => [f, t(`hz.${k}.${f}`)]));
   const HAZARDS = {
-    vines: { cut: 'Лиана срезана', status: 'Опутан', hit: 'Опутан!', guardOff: 'Опутан — защита не работает', tip: 'Срезай лианы росчерком поперёк, пока они не дотянулись до центра', short: 'Срезай лианы росчерком поперёк', stat: 'Срезано лиан', color: '#6fdc6a', cutColor: '#9fe89a' },
-    wisps: { cut: 'Огонёк развеян', status: 'Одержим', hit: 'Одержим!', guardOff: 'Одержим — защита не работает', tip: 'Развеивай призрачные огоньки росчерком поперёк их следа', short: 'Развеивай огоньки росчерком поперёк следа', stat: 'Развеяно огоньков', color: '#6cc8ff', cutColor: '#bfe6ff' }
+    vines: { ...hazardTexts('vines'), color: '#6fdc6a', cutColor: '#9fe89a' },
+    wisps: { ...hazardTexts('wisps'), color: '#6cc8ff', cutColor: '#bfe6ff' }
   };
   function spawnVine() {
     fight.vines.push({ side: Math.random() < 0.5 ? 'left' : 'right', y: rand(260, 640), t: 0, grow: rand(4.6, 5.6), seed: Math.random() * 10 });
@@ -815,21 +817,21 @@
       if (enemyActive(e)) enemyStamina(e, amount);
       fight.stats.links++;
       addCombo(fight.hero);
-      floatText(hit[n - 1].x, hit[n - 1].y - 30, `Связка ×${n}  −${amount} выносл.`, '#ffe9a8', 24);
+      floatText(hit[n - 1].x, hit[n - 1].y - 30, t('fight.link', { n, amount }), '#ffe9a8', 24);
       sfx.link();
       if (n >= 3 && hasRelic(fight.hero, 'moon')) tryBreak(e);
       return;
     }
     if (e.state === 'telegraph') {
       const c = guardCenter();
-      if (pathHitsCircle(path, c.x, c.y, GUARD_R)) { floatText(c.x, c.y - GUARD_R - 14, 'По кругу удара — без урона', '#cfd6e6', 18, 0.7); return; }
+      if (pathHitsCircle(path, c.x, c.y, GUARD_R)) { floatText(c.x, c.y - GUARD_R - 14, t('fight.circleNoDmg'), '#cfd6e6', 18, 0.7); return; }
     }
     let len = 0;
     for (let i = 1; i < path.length; i++) len += dist(path[i - 1].x, path[i - 1].y, path[i].x, path[i].y);
     const box = { x0: L.cx - L.dw * 0.32, x1: L.cx + L.dw * 0.32, y0: L.top + L.dh * 0.08, y1: L.bottom - 20 };
     const crosses = path.some((p) => p.x > box.x0 && p.x < box.x1 && p.y > box.y0 && p.y < box.y1);
     if (len >= 90 && crosses) heroSlash(path);
-    else if (hit.length === 1) floatText(hit[0].x, hit[0].y - 30, 'Нужно соединить две сферы', '#ffe9a8', 20);
+    else if (hit.length === 1) floatText(hit[0].x, hit[0].y - 30, t('fight.needTwo'), '#ffe9a8', 20);
   }
 
   // ---------------------------------------------------------------- обновление боя
@@ -862,8 +864,8 @@
             e.lastStand = true;
             e.atk.interval = e.atk.interval.map((v) => v * 2);   // без брони атакует вдвое реже
           }
-          floatText(f.layout.cx, f.layout.chestY - 40, 'Пришла в себя!', '#ff9a7a', 28);
-          tip('Измотай её снова: удар или росчерк при выносливости ниже 30% — она снова сломлена');
+          floatText(f.layout.cx, f.layout.chestY - 40, t('fight.recovered'), '#ff9a7a', 28);
+          tip(t('tip.recovered'));
         }
       }
     }
@@ -1099,7 +1101,7 @@
     ctx.fillStyle = '#e9c27a';
     roundRect(L.cx - 116, L.top + 10, 232 * clamp(e.st / SUBDUE_WINDOW, 0, 1), 22, 11); ctx.fill();
     ctx.fillStyle = '#1a1208'; ctx.font = '600 14px ' + bodyFont; ctx.textAlign = 'center';
-    ctx.fillText('СЛОМЛЕНА', L.cx, L.top + 26);
+    ctx.fillText(t('hud.subdued'), L.cx, L.top + 26);
     ctx.restore();
   }
 
@@ -1143,7 +1145,7 @@
     ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.stroke();
     ctx.textAlign = 'center'; ctx.font = `700 15px ${bodyFont}`;
     ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(10,6,12,.8)';
-    const label = holding ? 'БЛОК' : inParry ? 'ЖМИ!' : 'ЖМИ В КРУГ';
+    const label = holding ? t('tel.block') : inParry ? t('tel.now') : t('tel.press');
     ctx.strokeText(label, c.x, c.y + 5);
     ctx.fillStyle = holding ? '#ffe28a' : inParry ? '#9fffc9' : '#f3ece0';
     ctx.fillText(label, c.x, c.y + 5);
@@ -1321,7 +1323,7 @@
     ctx.strokeStyle = '#e9c27a'; ctx.lineWidth = 6;
     ctx.beginPath(); ctx.arc(x, y, 56, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * e.capture); ctx.stroke();
     ctx.fillStyle = '#e9c27a'; ctx.font = `700 18px ${displayFont}`; ctx.textAlign = 'center';
-    ctx.fillText('Захват', x, y - 70);
+    ctx.fillText(t('hud.capture'), x, y - 70);
     ctx.restore();
   }
 
@@ -1391,10 +1393,11 @@
     ctx.fillText(ed.name, 20, 38);
     let nx = 30 + ctx.measureText(ed.name).width;
     ctx.fillStyle = '#b9ae9c'; ctx.font = `500 15px ${bodyFont}`;
-    ctx.fillText(`ур. ${e.lvl}`, nx, 38);
-    nx += ctx.measureText(`ур. ${e.lvl}`).width + 10;
-    if (e.kind === 'elite') tag('ЭЛИТА', nx, 36, '#c8622a');
-    if (e.kind === 'boss') tag(`БОСС · ФАЗА ${e.phase + 1}/${e.parts + 1}`, nx, 36, '#8a3cc0');
+    const lvl = t('lvl', { n: e.lvl });
+    ctx.fillText(lvl, nx, 38);
+    nx += ctx.measureText(lvl).width + 10;
+    if (e.kind === 'elite') tag(t('hud.elite'), nx, 36, '#c8622a');
+    if (e.kind === 'boss') tag(t('hud.boss', { p: e.phase + 1, n: e.parts + 1 }), nx, 36, '#8a3cc0');
 
     ctx.textAlign = 'right';
     ctx.fillStyle = '#f3ece0'; ctx.font = `600 20px ${displayFont}`;
@@ -1410,12 +1413,13 @@
     ctx.fillStyle = '#fff'; ctx.fillRect(20 + sw * 0.3, 71, 2, 16);
     ctx.textAlign = 'left'; ctx.font = `600 12px ${bodyFont}`;
     ctx.fillStyle = tir ? '#ffb070' : '#b9ae9c';
-    ctx.fillText(tir ? 'ИЗМОТАНА' : 'выносливость', 20, 102);
-    if (e.lastStand) { ctx.fillStyle = '#9fd98a'; ctx.fillText('· без брони: атакует вдвое реже', 96, 102); }
+    const stLabel = tir ? t('hud.tired') : t('hud.stamina');
+    ctx.fillText(stLabel, 20, 102);
+    if (e.lastStand) { ctx.fillStyle = '#9fd98a'; ctx.fillText(t('hud.lastStand'), 26 + ctx.measureText(stLabel).width, 102); }
 
     const parts = e.parts;
     ctx.textAlign = 'right'; ctx.fillStyle = '#b9ae9c';
-    ctx.fillText('броня', W - 20, 102);
+    ctx.fillText(t('hud.armor'), W - 20, 102);
     for (let i = 0; i < parts; i++) {
       const broken = i < e.stage;
       const x = W - 32 - (parts - 1 - i) * 30, y = 79;
@@ -1435,7 +1439,7 @@
       ctx.strokeText(`${h.combo}`, W - 24, 200);
       ctx.fillStyle = '#ffe2a8'; ctx.fillText(`${h.combo}`, W - 24, 200);
       ctx.font = `600 13px ${bodyFont}`; ctx.fillStyle = '#b9ae9c';
-      ctx.fillText('комбо', W - 24, 218);
+      ctx.fillText(t('hud.combo'), W - 24, 218);
     }
   }
 
@@ -1453,10 +1457,12 @@
     const y0 = HUD_BOTTOM;
     bottomPanel(y0);
     ctx.textAlign = 'left'; ctx.fillStyle = '#e9c27a'; ctx.font = `600 18px ${displayFont}`;
-    ctx.fillText('Герой', 20, y0 + 48);
+    ctx.fillText(t('hud.hero'), 20, y0 + 48);
+    let hx = 28 + ctx.measureText(t('hud.hero')).width;
     ctx.fillStyle = '#b9ae9c'; ctx.font = `500 13px ${bodyFont}`;
-    ctx.fillText(`ур. ${h.lvl}`, 76, y0 + 48);
-    if (h.relics.length) { ctx.fillStyle = '#c9b6f0'; ctx.fillText(`реликвий: ${h.relics.length}`, 124, y0 + 48); }
+    ctx.fillText(t('lvl', { n: h.lvl }), hx, y0 + 48);
+    hx += ctx.measureText(t('lvl', { n: h.lvl })).width + 12;
+    if (h.relics.length) { ctx.fillStyle = '#c9b6f0'; ctx.fillText(t('hud.relics', { n: h.relics.length }), hx, y0 + 48); }
 
     bar(20, y0 + 56, 300, 16, h.hp / h.hpMax, h.hp / h.hpMax < 0.3 ? '#d9473f' : '#5fbf6a');
     ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.font = `600 11px ${bodyFont}`;
@@ -1465,7 +1471,7 @@
     bar(20, y0 + 77, 300, 10, h.stam / h.stamMax, exh ? `rgba(255,${90 + 60 * Math.sin(G.time * 12)},70,1)` : '#4fa6e0');
     ctx.textAlign = 'left'; ctx.font = `600 12px ${bodyFont}`;
     ctx.fillStyle = exh ? '#ff9a7a' : '#b9ae9c';
-    ctx.fillText(exh ? 'ОДЫШКА — удары слабые' : 'выносливость', 20, y0 + 102);
+    ctx.fillText(exh ? t('hud.winded') : t('hud.stamina'), 20, y0 + 102);
 
     let sx = 20;
     const pill = (text, color) => {
@@ -1476,12 +1482,12 @@
       ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.fillText(text, sx + 9, y0 + 124);
       sx += w + 8;
     };
-    if (h.burn > 0) pill(`Горение ${h.burn.toFixed(1)} с`, D.elements.fire.color);
-    if (h.shock > 0) pill(`Шок ×${h.shock}`, D.elements.electric.color);
-    if (h.chill > 0) pill(`Холод ${h.chill.toFixed(1)} с`, D.elements.ice.color);
-    if (h.entangled > 0) pill(`${fight.hazard.status} ${h.entangled.toFixed(1)} с`, fight.hazard.color);
+    if (h.burn > 0) pill(t('pill.burn', { s: h.burn.toFixed(1) }), D.elements.fire.color);
+    if (h.shock > 0) pill(t('pill.shock', { n: h.shock }), D.elements.electric.color);
+    if (h.chill > 0) pill(t('pill.chill', { s: h.chill.toFixed(1) }), D.elements.ice.color);
+    if (h.entangled > 0) pill(t('pill.hazard', { name: fight.hazard.status, s: h.entangled.toFixed(1) }), fight.hazard.color);
 
-    const labels = ['Авангард', 'Клинок', 'Тыл'];
+    const labels = [t('slot.vanguard'), t('slot.blade'), t('slot.rear')];
     for (let i = 0; i < 3; i++) {
       const x = 20 + i * 54, y = y0 + 138;
       ctx.fillStyle = 'rgba(255,255,255,.04)'; roundRect(x, y, 44, 40, 8); ctx.fill();
@@ -1521,16 +1527,24 @@
     ctx.font = `700 26px ${displayFont}`;
     ctx.fillText('×' + m.toFixed(1), cx, cy + 9);
     ctx.fillStyle = '#b9ae9c'; ctx.font = `500 12px ${bodyFont}`;
-    ctx.fillText(m >= CHARGED ? 'ломает броню' : 'заряд', cx, cy + r + 22);
+    ctx.fillText(m >= CHARGED ? t('hud.breaks') : t('hud.charge'), cx, cy + r + 22);
 
     const text = f.tipT > 0 ? f.tip : contextTip();
-    ctx.fillStyle = '#d8ccb6'; ctx.font = `500 13px ${bodyFont}`; ctx.textAlign = 'center';
-    ctx.fillText(text, W / 2, H - 9);
+    ctx.fillStyle = '#d8ccb6'; ctx.textAlign = 'center';
+    fitText(text, W / 2, H - 9, W - 24, 13);
+  }
+
+  // Строка текста, которая уменьшает шрифт, если не помещается в maxW
+  function fitText(text, x, y, maxW, size, weight = 500) {
+    ctx.font = `${weight} ${size}px ${bodyFont}`;
+    const w = ctx.measureText(text).width;
+    if (w > maxW) ctx.font = `${weight} ${Math.max(9, size * maxW / w).toFixed(1)}px ${bodyFont}`;
+    ctx.fillText(text, x, y);
   }
 
   function drawSeals(x0, y, n, max) {
     ctx.textAlign = 'left'; ctx.fillStyle = '#b9ae9c'; ctx.font = `500 12px ${bodyFont}`;
-    ctx.fillText('Печати захвата', x0, y);
+    ctx.fillText(t('hud.seals'), x0, y);
     for (let i = 0; i < max; i++) {
       const on = i < n;
       const x = x0 + 10 + i * 28, yy = y + 18;
@@ -1544,12 +1558,12 @@
   function contextTip() {
     const f = fight, e = f.enemy;
     if (f.over) return '';
-    if (e.state === 'subdued') return f.hero.seals > 0 ? 'Удерживай палец на ней — захват · Тап — добить' : 'Тап — добить';
-    if (e.state === 'telegraph') return 'Нажми в круг, когда кольцо зелёное — парирование. Держи в круге — блок';
+    if (e.state === 'subdued') return f.hero.seals > 0 ? t('ctx.subdue') : t('ctx.subdueNoSeals');
+    if (e.state === 'telegraph') return t('ctx.tel');
     if (f.vines.length) return f.hazard.short;
-    if (tired(e)) return 'Измотана! Заряженный удар (×1.8+) или росчерк ломает броню';
-    if (f.spheres.length >= 2) return 'Проведи росчерк через две сферы — она потеряет выносливость';
-    return 'Тап — удар · Пауза — заряд · Круг удара — защита · Росчерк — рассечение';
+    if (tired(e)) return t('ctx.tired');
+    if (f.spheres.length >= 2) return t('ctx.spheres');
+    return t('ctx.default');
   }
 
   function drawSwipe() {
@@ -1569,13 +1583,13 @@
 
   // ================================================================ ЗАБЕГ И УРОВЕНЬ
   const ROOM = {
-    start:    { name: 'Темница',   color: '#8c7d9a' },
-    fight:    { name: 'Бой',       color: '#e2554b' },
-    elite:    { name: 'Элита',     color: '#ff8c3a' },
-    rest:     { name: 'Привал',    color: '#ffb347' },
-    event:    { name: 'Событие',   color: '#8fb8ff' },
-    treasure: { name: 'Сокровище', color: '#e9c27a' },
-    boss:     { name: 'Босс',      color: '#c84cff' }
+    start:    { name: t('room.start'),    color: '#8c7d9a' },
+    fight:    { name: t('room.fight'),    color: '#e2554b' },
+    elite:    { name: t('room.elite'),    color: '#ff8c3a' },
+    rest:     { name: t('room.rest'),     color: '#ffb347' },
+    event:    { name: t('room.event'),    color: '#8fb8ff' },
+    treasure: { name: t('room.treasure'), color: '#e9c27a' },
+    boss:     { name: t('room.boss'),     color: '#c84cff' }
   };
 
   const pickOne = (v) => (Array.isArray(v) ? pick(v) : v);
@@ -1631,9 +1645,9 @@
     hideAllOverlays();
     show(ui.pauseBtn);
     showPanel({
-      kicker: 'Пролог', title: 'Темница',
-      text: 'Ты снова открываешь глаза на холодном полу темницы. Метка проклятия жжёт запястье — владелица подземелья не отпустит так просто.\n\nГде-то наверху — выход. Нужно подниматься.',
-      choices: [{ title: 'Встать', desc: 'Перед тобой несколько проходов. Значки над ними подскажут, что ждёт впереди.', on: () => { run.cur.done = true; hidePanel(); } }]
+      kicker: t('prologue.kicker'), title: t('prologue.title'),
+      text: t('prologue.text'),
+      choices: [{ title: t('prologue.go'), desc: t('prologue.goDesc'), on: () => { run.cur.done = true; hidePanel(); } }]
     });
   }
 
@@ -1737,7 +1751,7 @@
     ctx.textAlign = 'center'; ctx.font = `600 15px ${displayFont}`;
     ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(8,6,12,.9)';
     const label = node.type === 'fight' || node.type === 'elite' || node.type === 'boss'
-      ? `${R.name} · ур. ${node.lvl}` : R.name;
+      ? t('door.lvl', { name: R.name, n: node.lvl }) : R.name;
     ctx.strokeText(label, ix, iy + 46); ctx.fillStyle = R.color; ctx.fillText(label, ix, iy + 46);
     ctx.restore();
   }
@@ -1789,19 +1803,19 @@
     ctx.textAlign = 'left'; ctx.fillStyle = '#e9c27a'; ctx.font = `600 21px ${displayFont}`;
     ctx.fillText(run.floor.name, 20, 36);
     ctx.textAlign = 'right'; ctx.fillStyle = '#b9ae9c'; ctx.font = `500 13px ${bodyFont}`;
-    ctx.fillText(`комната ${Math.max(0, curLayerIdx())}/${roomCount()}`, W - 20, 36);
+    ctx.fillText(t('map.room', { i: Math.max(0, curLayerIdx()), n: roomCount() }), W - 20, 36);
 
     bar(20, 48, W - 40, 15, rh.hp / rh.hpMax, rh.hp / rh.hpMax < 0.3 ? '#d9473f' : '#5fbf6a');
     ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.font = `600 11px ${bodyFont}`;
-    ctx.fillText(`Герой ур. ${rh.lvl} · ${Math.ceil(rh.hp)} / ${rh.hpMax}`, W / 2, 60);
+    ctx.fillText(t('map.hero', { lvl: rh.lvl, hp: Math.ceil(rh.hp), max: rh.hpMax }), W / 2, 60);
     const need = xpNeed(rh.lvl);
     bar(20, 69, W - 40, 7, rh.xp / need, '#9a7be0');
     ctx.textAlign = 'left'; ctx.fillStyle = '#b9ae9c'; ctx.font = `500 11.5px ${bodyFont}`;
-    ctx.fillText(`опыт ${rh.xp}/${need}`, 20, 92);
+    ctx.fillText(t('map.xp', { xp: rh.xp, need }), 20, 92);
     drawSeals(150, 92, rh.seals, rh.sealsMax);
     ctx.textAlign = 'right'; ctx.fillStyle = '#c9b6f0';
     const names = rh.relics.map((id) => D.relics.find((r) => r.id === id).name);
-    ctx.fillText(names.length ? names.slice(-2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '') : 'реликвий нет', W - 20, 92);
+    ctx.fillText(names.length ? names.slice(-2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '') : t('map.noRelics'), W - 20, 92);
   }
 
   function drawMiniMap() {
@@ -1837,8 +1851,8 @@
       }
     }
     ctx.restore();
-    ctx.fillStyle = '#d8ccb6'; ctx.font = `500 13px ${bodyFont}`; ctx.textAlign = 'center';
-    ctx.fillText(run.cur.done ? 'Выбери дверь — значок над ней показывает, что впереди' : '', W / 2, H - 9);
+    ctx.fillStyle = '#d8ccb6'; ctx.textAlign = 'center';
+    fitText(run.cur.done ? t('map.chooseDoor') : '', W / 2, H - 9, W - 24, 13);
   }
 
   function chooseDoor(i) {
@@ -1867,8 +1881,8 @@
       case 'boss': {
         const ed = D.enemies[node.enemy];
         showPanel({
-          kicker: 'Босс этажа', title: ed.name, img: ed.sprites[0], text: ed.intro,
-          choices: [{ title: 'Сразиться', desc: ed.about, on: () => { hidePanel(); startRunFight(node); } }]
+          kicker: t('boss.kicker'), title: ed.name, img: ed.sprites[0], text: ed.intro,
+          choices: [{ title: t('boss.fight'), desc: ed.about, on: () => { hidePanel(); startRunFight(node); } }]
         });
         break;
       }
@@ -1877,10 +1891,10 @@
         break;
       case 'treasure': {
         const opts = relicChoices(3);
-        if (!opts.length) { grantXp(40); showPanel({ kicker: 'Сокровище', title: 'Пустой сундук', text: 'Кто-то побывал здесь раньше. На дне — только старые монеты. Опыт +40.', choices: [{ title: 'Дальше', on: roomDone }] }); break; }
+        if (!opts.length) { grantXp(40); showPanel({ kicker: t('tr.kicker'), title: t('tr.emptyTitle'), text: t('tr.emptyText'), choices: [{ title: t('next'), on: roomDone }] }); break; }
         showPanel({
-          kicker: 'Сокровище', title: 'Сундук', text: 'Под слоем пыли — три вещицы, пропитанные силой подземелья. Унести можно только одну.',
-          choices: opts.map((r) => ({ title: r.name, desc: r.text, cls: 'relic', ck: 'реликвия', on: () => { addRelic(r.id); roomDone(); } }))
+          kicker: t('tr.kicker'), title: t('tr.title'), text: t('tr.text'),
+          choices: opts.map((r) => ({ title: r.name, desc: r.text, cls: 'relic', ck: t('ck.relic'), on: () => { addRelic(r.id); roomDone(); } }))
         });
         break;
       }
@@ -1916,24 +1930,24 @@
     const base = f.ed.xp;
     const xp = Math.round(base * (f.outcome === 'captured' ? 0.8 : f.outcome === 'escaped' ? 0.5 : 1));
     const lv = grantXp(xp);
-    const lines = [`Опыт +${xp}.`];
-    if (f.outcome === 'captured') lines.push(`${f.ed.name} поймана и навсегда остаётся в коллекции.`);
-    if (lv) lines.push(`Новый уровень: ${rh.lvl}! Здоровье и урон выросли.`);
-    lines.push('', 'Выбери награду:');
+    const lines = [t('reward.xp', { n: xp })];
+    if (f.outcome === 'captured') lines.push(t('reward.caught', { name: f.ed.name }));
+    if (lv) lines.push(t('reward.lvl', { n: rh.lvl }));
+    lines.push('', t('reward.pick'));
     const choices = [];
     const rel = relicChoices(1)[0];
-    if (rel) choices.push({ title: rel.name, desc: rel.text, cls: 'relic', ck: 'реликвия', on: () => { addRelic(rel.id); roomDone(); } });
+    if (rel) choices.push({ title: rel.name, desc: rel.text, cls: 'relic', ck: t('ck.relic'), on: () => { addRelic(rel.id); roomDone(); } });
     const up = pick(D.upgrades);
-    choices.push({ title: up.name, desc: up.text, ck: 'улучшение', on: () => { applyUpgrade(up.id); roomDone(); } });
-    if (rh.seals < 4) choices.push({ title: 'Печать захвата', desc: `+1 печать (сейчас ${rh.seals}).`, ck: 'печать', on: () => { rh.seals++; rh.sealsMax = Math.max(rh.sealsMax, rh.seals); roomDone(); } });
-    else choices.push({ title: 'Перевязка', desc: 'Восстановить 30% здоровья.', ck: 'лечение', on: () => { heal(0.3); roomDone(); } });
+    choices.push({ title: up.name, desc: up.text, ck: t('ck.upgrade'), on: () => { applyUpgrade(up.id); roomDone(); } });
+    if (rh.seals < 4) choices.push({ title: t('reward.seal'), desc: t('reward.sealDesc', { n: rh.seals }), ck: t('ck.seal'), on: () => { rh.seals++; rh.sealsMax = Math.max(rh.sealsMax, rh.seals); roomDone(); } });
+    else choices.push({ title: t('reward.bandage'), desc: t('reward.bandageDesc'), ck: t('ck.heal'), on: () => { heal(0.3); roomDone(); } });
     G.mode = 'map';
     hide(ui.result);
     if (lv) sfx.level();
-    showPanel({ kicker: node.type === 'elite' ? 'Элита повержена' : 'Победа', title: resultTitle(f.outcome), img: spriteFor(f.ed, f.enemy.stage), text: lines.join('\n'), choices });
+    showPanel({ kicker: node.type === 'elite' ? t('reward.eliteKicker') : t('reward.kicker'), title: resultTitle(f.outcome), img: spriteFor(f.ed, f.enemy.stage), text: lines.join('\n'), choices });
   }
 
-  function resultTitle(o) { return { captured: 'Захвачена!', finished: 'Добита', defeated: 'Повержена', escaped: 'Сбежала' }[o] || ''; }
+  function resultTitle(o) { return ['captured', 'finished', 'defeated', 'escaped', 'lose'].includes(o) ? t('res.' + o) : ''; }
 
   function grantXp(x) {
     const rh = run.hero;
@@ -1973,67 +1987,67 @@
     const rh = run.hero;
     const caught = Object.keys(save.captured).length;
     showPanel({
-      kicker: 'Привал', title: 'Костёр',
-      text: `Сухие ветки трещат в огне. Здесь можно перевести дух.\nЗдоровье: ${Math.ceil(rh.hp)} / ${rh.hpMax}.`,
+      kicker: t('rest.kicker'), title: t('rest.title'),
+      text: t('rest.text', { hp: Math.ceil(rh.hp), max: rh.hpMax }),
       choices: [
-        { title: 'Отдохнуть', desc: 'Восстановить 35% здоровья.', on: () => { heal(0.35); roomDone(); } },
-        { title: 'Тренироваться', desc: 'Выбрать одно улучшение из трёх.', on: () => showUpgradePick('Тренировка', 'Удары по манекену из старых доспехов. Что отработать?') },
-        { title: 'Поговорить со спутницей', desc: caught ? 'Появится вместе с отрядом в следующих прототипах.' : 'Пока никого нет рядом.', disabled: true }
+        { title: t('rest.rest'), desc: t('rest.restDesc'), on: () => { heal(0.35); roomDone(); } },
+        { title: t('rest.train'), desc: t('rest.trainDesc'), on: () => showUpgradePick(t('up.trainTitle'), t('up.trainText')) },
+        { title: t('rest.talk'), desc: caught ? t('rest.talkSoon') : t('rest.talkNone'), disabled: true }
       ]
     });
   }
 
   function showUpgradePick(title, text) {
     const ups = shuffle(D.upgrades).slice(0, 3);
-    showPanel({ kicker: 'Улучшение', title, text, choices: ups.map((u) => ({ title: u.name, desc: u.text, ck: 'улучшение', on: () => { applyUpgrade(u.id); roomDone(); } })) });
+    showPanel({ kicker: t('up.kicker'), title, text, choices: ups.map((u) => ({ title: u.name, desc: u.text, ck: t('ck.upgrade'), on: () => { applyUpgrade(u.id); roomDone(); } })) });
   }
 
   const EVENTS = [
     {
-      id: 'camp', title: 'Брошенный лагерь',
-      text: 'Среди разбитых ящиков тлеет костёр. Рядом — чья-то походная сумка, ремни ещё тёплые.',
+      id: 'camp', title: t('ev.camp.title'),
+      text: t('ev.camp.text'),
       choices: [
-        { title: 'Обыскать сумку', desc: 'Может, там что-то полезное…', act: () => {
-          if (Math.random() < 0.65) { run.hero.seals++; run.hero.sealsMax = Math.max(run.hero.sealsMax, run.hero.seals); return 'Внутри, завёрнутая в тряпицу, лежит печать захвата.'; }
-          run.hero.hp = Math.max(1, run.hero.hp - 12); return 'Из сумки выскальзывает змея! Укус жжёт руку. Здоровье −12.';
+        { title: t('ev.camp.search'), desc: t('ev.camp.searchDesc'), act: () => {
+          if (Math.random() < 0.65) { run.hero.seals++; run.hero.sealsMax = Math.max(run.hero.sealsMax, run.hero.seals); return t('ev.camp.searchOk'); }
+          run.hero.hp = Math.max(1, run.hero.hp - 12); return t('ev.camp.searchBad');
         } },
-        { title: 'Посидеть у огня', desc: 'Восстановить 20% здоровья.', act: () => { heal(0.2); return 'Тепло возвращает силы.'; } }
+        { title: t('ev.camp.sit'), desc: t('ev.camp.sitDesc'), act: () => { heal(0.2); return t('ev.camp.sitOut'); } }
       ]
     },
     {
-      id: 'cage', title: 'Пленница', img: 'bunny',
-      text: 'За ржавой решёткой сжалась девушка-крольчиха. «Выпусти меня! Я знаю, где здесь спрятано кое-что ценное…»',
+      id: 'cage', title: t('ev.cage.title'), img: 'bunny',
+      text: t('ev.cage.text'),
       choices: [
-        { title: 'Открыть клетку', desc: 'Поверить ей.', act: () => {
+        { title: t('ev.cage.open'), desc: t('ev.cage.openDesc'), act: () => {
           const r = relicChoices(1)[0];
-          if (!r) { grantXp(40); return 'Она ускакала, крикнув «спасибо!». Опыт +40.'; }
-          addRelic(r.id); return `Она шепчет о тайнике за шатающимся камнем. Ты находишь реликвию: ${r.name}.\n${r.text}`;
+          if (!r) { grantXp(40); return t('ev.cage.openNone'); }
+          addRelic(r.id); return t('ev.cage.openOk', { name: r.name, text: r.text });
         } },
-        { title: 'Пройти мимо', desc: 'В подземелье никому нельзя верить.', act: () => 'Её всхлипы ещё долго звучат за спиной.' }
+        { title: t('ev.cage.pass'), desc: t('ev.cage.passDesc'), act: () => t('ev.cage.passOut') }
       ]
     },
     {
-      id: 'altar', title: 'Алтарь метки',
-      text: 'У древнего алтаря метка проклятия на запястье вспыхивает багровым. Камень жаждет крови.',
+      id: 'altar', title: t('ev.altar.title'),
+      text: t('ev.altar.text'),
       choices: [
-        { title: 'Коснуться алтаря', desc: '−20% максимального здоровья, но много опыта.', act: () => {
+        { title: t('ev.altar.touch'), desc: t('ev.altar.touchDesc'), act: () => {
           run.hero.hp = Math.max(1, Math.round(run.hero.hp - run.hero.hpMax * 0.2));
           const lv = grantXp(100);
           if (lv) sfx.level();
-          return 'Боль сменяется силой: ты помнишь сотню битв, которых не было. Опыт +100.' + (lv ? `\nНовый уровень: ${run.hero.lvl}!` : '');
+          return t('ev.altar.touchOut') + (lv ? t('ev.altar.lvl', { n: run.hero.lvl }) : '');
         } },
-        { title: 'Уйти', desc: 'Не стоит кормить проклятие.', act: () => 'Метка гаснет. Камень остаётся голодным.' }
+        { title: t('ev.altar.leave'), desc: t('ev.altar.leaveDesc'), act: () => t('ev.altar.leaveOut') }
       ]
     },
     {
-      id: 'whisper', title: 'Шёпот из темноты',
-      text: '«Ты снова здесь, мой маленький пленник…» — голос владелицы подземелья звучит отовсюду. «Поднимайся. Посмотрим, как далеко ты зайдёшь в этот раз.»',
+      id: 'whisper', title: t('ev.whisper.title'),
+      text: t('ev.whisper.text'),
       choices: [
-        { title: 'Ответить дерзко', desc: 'Пусть знает, что ты не сдашься.', act: () => {
+        { title: t('ev.whisper.bold'), desc: t('ev.whisper.boldDesc'), act: () => {
           const u = pick(D.upgrades); applyUpgrade(u.id);
-          return `Смех эхом катится по коридорам. Метка теплеет — проклятию нравится твоё упрямство.\nУлучшение: ${u.name}. ${u.text}`;
+          return t('ev.whisper.boldOut', { name: u.name, text: u.text });
         } },
-        { title: 'Промолчать', desc: 'Восстановить 10% здоровья.', act: () => { heal(0.1); return 'Тишина. Только где-то капает вода.'; } }
+        { title: t('ev.whisper.quiet'), desc: t('ev.whisper.quietDesc'), act: () => { heal(0.1); return t('ev.whisper.quietOut'); } }
       ]
     }
   ];
@@ -2042,10 +2056,10 @@
     const id = run.events.shift() || pick(EVENTS).id;
     const ev = EVENTS.find((e) => e.id === id);
     showPanel({
-      kicker: 'Событие', title: ev.title, text: ev.text, img: ev.img ? D.enemies[ev.img].sprites[0] : null,
+      kicker: t('ev.kicker'), title: ev.title, text: ev.text, img: ev.img ? D.enemies[ev.img].sprites[0] : null,
       choices: ev.choices.map((c) => ({ title: c.title, desc: c.desc, on: () => {
         const out = c.act();
-        showPanel({ kicker: 'Событие', title: ev.title, text: out, img: ev.img ? D.enemies[ev.img].sprites[0] : null, choices: [{ title: 'Дальше', on: roomDone }] });
+        showPanel({ kicker: t('ev.kicker'), title: ev.title, text: out, img: ev.img ? D.enemies[ev.img].sprites[0] : null, choices: [{ title: t('next'), on: roomDone }] });
       } }))
     });
   }
@@ -2054,10 +2068,10 @@
     const rh = run.hero;
     const names = run.captured.map((id) => D.enemies[id].name);
     return [
-      `Время в боях: ${fmtTime(run.time)} · боёв: ${run.fights}`,
-      `Уровень героя: ${rh.lvl}`,
-      `Пойманы: ${names.length ? names.join(', ') : 'никто'}`,
-      `Реликвии: ${rh.relics.length ? rh.relics.map((id) => D.relics.find((r) => r.id === id).name).join(', ') : 'нет'}`
+      t('sum.time', { t: fmtTime(run.time), n: run.fights }),
+      t('sum.lvl', { n: rh.lvl }),
+      t('sum.caught', { list: names.length ? names.join(', ') : t('sum.nobody') }),
+      t('sum.relics', { list: rh.relics.length ? rh.relics.map((id) => D.relics.find((r) => r.id === id).name).join(', ') : t('sum.none') })
     ].join('\n');
   }
 
@@ -2073,9 +2087,9 @@
     hide(ui.result); hide(ui.pauseBtn);
     sfx.level();
     showPanel({
-      kicker: 'Этаж пройден', title: `${fight.ed.name} ` + (fight.outcome === 'captured' ? 'поймана!' : fight.outcome === 'escaped' ? 'отступила!' : 'повержена!'), img: spriteFor(fight.ed, fight.enemy.stage),
-      text: 'Лестница наверх свободна. Где-то выше ждут новые ярусы подземелья — и его владелица.\n\n' + runSummaryText() + '\n\nКонец прототипа уровня.',
-      choices: [{ title: 'В меню', on: () => { run = null; toMenu(); } }]
+      kicker: t('win.kicker'), title: t(fight.outcome === 'captured' ? 'win.captured' : fight.outcome === 'escaped' ? 'win.escaped' : 'win.defeated', { name: fight.ed.name }), img: spriteFor(fight.ed, fight.enemy.stage),
+      text: t('win.text') + '\n\n' + runSummaryText() + '\n\n' + t('win.end'),
+      choices: [{ title: t('toMenu'), on: () => { run = null; toMenu(); } }]
     });
   }
 
@@ -2084,9 +2098,9 @@
     G.mode = 'map';
     hide(ui.result); hide(ui.pauseBtn);
     showPanel({
-      kicker: 'Поражение', title: 'Проклятие',
-      text: 'Тьма смыкается. Метка вспыхивает — и ты снова очнёшься на холодном полу темницы, на самом дне.\nПойманные спутницы остаются с тобой.\n\n' + runSummaryText(),
-      choices: [{ title: 'В меню', on: () => { run = null; toMenu(); } }]
+      kicker: t('lose.kicker'), title: t('lose.title'),
+      text: t('lose.text') + '\n\n' + runSummaryText(),
+      choices: [{ title: t('toMenu'), on: () => { run = null; toMenu(); } }]
     });
   }
 
@@ -2178,12 +2192,12 @@
     for (const [id, e] of Object.entries(D.enemies)) {
       const b = document.createElement('button');
       b.className = 'card' + (G.selected === id ? ' sel' : '');
-      const kind = e.kind === 'boss' ? 'Босс' : e.kind === 'elite' ? 'Элита' : '';
+      const kind = e.kind === 'boss' ? t('kind.boss') : e.kind === 'elite' ? t('kind.elite') : '';
       b.innerHTML = `
         <div class="portrait"><img src="${e.sprites[0]}" alt=""></div>
         ${kind ? `<div class="badge kind">${kind}</div>` : ''}
-        ${save.captured[id] ? '<div class="badge">Поймана</div>' : ''}
-        <div class="info"><div class="name">${e.name}</div><div class="tag">${e.subtitle}${e.custom ? ' · своя' : ''}</div><div class="about">${e.about}</div></div>`;
+        ${save.captured[id] ? `<div class="badge">${t('menu.caught')}</div>` : ''}
+        <div class="info"><div class="name">${e.name}</div><div class="tag">${e.subtitle}${e.custom ? t('menu.custom') : ''}</div><div class="about">${e.about}</div></div>`;
       b.addEventListener('click', () => { G.selected = id; buildMenu(); });
       cards.appendChild(b);
     }
@@ -2191,29 +2205,29 @@
     $('#lvEnemy').textContent = G.enemyLvl;
     const d = G.heroLvl - G.enemyLvl;
     const boss = D.enemies[G.selected].kind === 'boss';
-    $('#lvHint').textContent = boss ? 'Босс: цель — бой 3–5 мин'
-      : d === 0 ? 'Равный уровень: цель — бой 25–60 с'
-      : d > 0 ? `Герой сильнее на ${d}: цель — бой 10–25 с`
-      : `Противница сильнее на ${-d}: цель — бой 1–2 мин, можно проиграть`;
-    const names = { captured: 'захвачена', finished: 'добита', defeated: 'повержена', escaped: 'сбежала', lose: 'поражение' };
+    $('#lvHint').textContent = boss ? t('hint.boss')
+      : d === 0 ? t('hint.equal')
+      : d > 0 ? t('hint.stronger', { n: d })
+      : t('hint.weaker', { n: -d });
+    const outName = (o) => (['captured', 'finished', 'defeated', 'escaped', 'lose'].includes(o) ? t('out.' + o) : o);
     const log = $('#log');
-    log.innerHTML = save.fights.length ? '' : '<div><span>Пока пусто</span></div>';
+    log.innerHTML = save.fights.length ? '' : `<div><span>${t('log.empty')}</span></div>`;
     for (const r of save.fights) {
       const row = document.createElement('div');
-      row.innerHTML = `<span>${D.enemies[r.id] ? D.enemies[r.id].name : r.id} · ${r.h} / ${r.e}${r.run ? ' · забег' : ''}</span><span>${fmtTime(r.t)} · ${names[r.o] || r.o}</span>`;
+      row.innerHTML = `<span>${D.enemies[r.id] ? D.enemies[r.id].name : r.id} · ${r.h} / ${r.e}${r.run ? t('log.run') : ''}</span><span>${fmtTime(r.t)} · ${outName(r.o)}</span>`;
       log.appendChild(row);
     }
     const col = $('#collection');
     const caught = Object.entries(save.captured);
-    col.innerHTML = caught.length ? '' : '<div><span>Пока никого. Сломи противницу и удерживай палец на ней.</span></div>';
+    col.innerHTML = caught.length ? '' : `<div><span>${t('col.empty')}</span></div>`;
     for (const [id, c] of caught) {
       if (!D.enemies[id]) continue;
       const row = document.createElement('div');
-      row.innerHTML = `<span>${D.enemies[id].name}</span><span>ур. ${c.lvl}${c.times > 1 ? ` · поймана ${c.times} раз` : ''}</span>`;
+      row.innerHTML = `<span>${D.enemies[id].name}</span><span>${t('lvl', { n: c.lvl })}${c.times > 1 ? t('col.times', { n: c.times }) : ''}</span>`;
       col.appendChild(row);
     }
-    $('#soundBtn').textContent = 'Звук: ' + (sfx.muted ? 'выкл' : 'вкл');
-    $('#pauseSoundBtn').textContent = 'Звук: ' + (sfx.muted ? 'выкл' : 'вкл');
+    $('#soundBtn').textContent = t(sfx.muted ? 'sound.off' : 'sound.on');
+    $('#pauseSoundBtn').textContent = t(sfx.muted ? 'sound.off' : 'sound.on');
   }
 
   document.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('click', () => {
@@ -2231,16 +2245,17 @@
     else toMenu();
   });
   $('#quitBtn').addEventListener('click', () => {
-    if (run && !confirm('Покинуть забег? Прогресс забега пропадёт, пойманные спутницы останутся.')) return;
+    if (run && !confirm(t('confirm.quit'))) return;
     G.paused = false; hide(ui.pause); run = null; toMenu();
     if (G.returnTo === 'editor' && window.CDEditor) { G.returnTo = null; window.CDEditor.open(); }
   });
   $('#resumeBtn').addEventListener('click', () => { G.paused = false; hide(ui.pause); });
   ui.pauseBtn.addEventListener('click', () => { if ((G.mode === 'fight' && !fight.over) || G.mode === 'map') { G.paused = true; resetInput(); buildMenu(); show(ui.pause); } });
   $('#soundBtn').addEventListener('click', () => { sfx.toggle(); buildMenu(); });
+  $('#langBtn').addEventListener('click', () => { const L = window.I18N.langs; window.I18N.setLang(L[(L.indexOf(window.I18N.lang) + 1) % L.length]); });
   $('#pauseSoundBtn').addEventListener('click', () => { sfx.toggle(); buildMenu(); });
   $('#resetBtn').addEventListener('click', () => {
-    if (!confirm('Сбросить пойманных и историю боёв?')) return;
+    if (!confirm(t('confirm.reset'))) return;
     save = { captured: {}, fights: [], runs: [], muted: sfx.muted }; writeSave(); buildMenu();
   });
   document.addEventListener('visibilitychange', () => {
@@ -2264,34 +2279,27 @@
     G.mode = 'result';
     hide(ui.pauseBtn);
     const gold = Math.round((40 + 12 * e.lvl) * (f.outcome === 'escaped' ? 0.5 : 1));
-    const T = {
-      captured: ['Захвачена!', `${ed.name} связана печатью и навсегда остаётся в коллекции.`],
-      finished: ['Добита', `Ты отказался от захвата. Добыча: ${gold} золота.`],
-      defeated: ['Повержена', `Здоровье кончилось после того, как броня была разбита. Добыча: ${gold} золота.`],
-      escaped: ['Сбежала', `Здоровье кончилось раньше, чем броня, — захват невозможен. Она убежала, бросив ${gold} золота.`],
-      lose: ['Поражение', 'Герой пал. Проклятие вернёт его в темницу на самом дне…']
-    }[f.outcome];
-    $('#resTitle').textContent = T[0];
+    $('#resTitle').textContent = resultTitle(f.outcome);
     $('#resTitle').className = f.outcome === 'lose' ? 'bad' : '';
-    $('#resSub').textContent = T[1];
-    const t = f.endT;
+    $('#resSub').textContent = t(`res.${f.outcome}.sub`, { name: ed.name, gold });
+    const dur = f.endT;
     const d = h.lvl - e.lvl;
     const [lo, hi] = e.kind === 'boss' ? [180, 300] : d === 0 ? [25, 60] : d > 0 ? [10, 25] : [60, 120];
-    const cls = t < lo ? 'warn' : t > hi ? 'bad' : 'ok';
-    const verdict = t < lo ? 'быстрее цели' : t > hi ? 'дольше цели' : 'в цели';
+    const cls = dur < lo ? 'warn' : dur > hi ? 'bad' : 'ok';
+    const verdict = t(dur < lo ? 'res.fast' : dur > hi ? 'res.slow' : 'res.ok');
     const items = [
-      ['Время боя', `<span class="${cls}">${fmtTime(t)}</span>`, `цель ${fmtTime(lo)}–${fmtTime(hi)} · ${verdict}`, true],
-      ['Удары', s.taps], ['Росчерки', s.slashes],
-      ['Парирования', s.parries], ['Блоки', s.blocks],
-      ['Связки сфер', s.links], ['Сломано брони', `${s.breaks} / ${e.parts}`],
-      ['Макс. комбо', h.maxCombo], ['Получено урона', Math.round(s.taken)]
+      [t('st.time'), `<span class="${cls}">${fmtTime(dur)}</span>`, t('res.target', { lo: fmtTime(lo), hi: fmtTime(hi), v: verdict }), true],
+      [t('st.taps'), s.taps], [t('st.slashes'), s.slashes],
+      [t('st.parries'), s.parries], [t('st.blocks'), s.blocks],
+      [t('st.links'), s.links], [t('st.breaks'), `${s.breaks} / ${e.parts}`],
+      [t('st.combo'), h.maxCombo], [t('st.taken'), Math.round(s.taken)]
     ];
     if (s.vines) items.push([f.hazard.stat, s.vines]);
     $('#resStats').innerHTML = items.map(([k, v, note, wide]) =>
       `<div class="stat${wide ? ' wide' : ''}"><div class="k">${k}</div><div class="v">${v}${note ? ` <span style="font-size:.6em;color:var(--ink-dim)">${note}</span>` : ''}</div></div>`).join('');
     const inRun = f.inRun && run;
     $('#nextBtn').classList.toggle('hidden', !inRun);
-    $('#nextBtn').textContent = f.outcome === 'lose' ? 'Итоги забега' : 'Дальше';
+    $('#nextBtn').textContent = t(f.outcome === 'lose' ? 'res.toRun' : 'res.next');
     $('#againBtn').classList.toggle('hidden', !!inRun);
     $('#menuBtn').classList.toggle('hidden', !!inRun);
     show(ui.result);
@@ -2329,11 +2337,11 @@
     requestAnimationFrame(frame);
     // свои противницы из редактора (хранятся в браузере)
     if (document.readyState === 'loading') await new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }));
-    if (window.CDEditor) { try { await window.CDEditor.loadCustom(); } catch (e) { console.warn('Свои противницы не загрузились', e); } }
+    if (window.CDEditor) { try { await window.CDEditor.loadCustom(); } catch (e) { console.warn('Custom opponents failed to load', e); } }
     try {
       await loadAssets();
     } catch (err) {
-      ui.loading.innerHTML = `Не удалось загрузить спрайты<div class="err">${err.message}.<br>Откройте index.html из папки игры целиком (вместе с папками assets и js).</div>`;
+      ui.loading.innerHTML = `${t('err.sprites')}<div class="err">${err.message}.<br>${t('err.spritesHint')}</div>`;
       return;
     }
     hide(ui.loading);
