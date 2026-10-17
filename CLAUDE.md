@@ -23,6 +23,10 @@
     помехи босса `HAZARDS` + `spawnVine`/`updateVines`/`drawVines`/`drawWisps`;
   - отряд: `BONUS` (виды бонусов → модификаторы героя), `withSquad` (накладывает бонусы на `mods` в `makeHero`),
     `squadMember`/`setSquad` (сохраняется в `save.squad`), выбор — `pickCompanion`/`showSquadPanel`;
+    портреты — `portraitSpot`/`portraitRect`/`portraitStyle` (голова по `portrait` в data.js или по силуэту),
+    слоты в бою `squadSlotRect`, подсказка `drawSquadTip` (наведение `G.hover` или касание `G.slotTip`);
+  - автобой: `updateAuto`/`autoPlan` (атакует, блокирует через `fight.autoGuard`, не парирует и не захватывает),
+    флаг `G.auto`, кнопка `#autoBtn`;
   - отрисовка боя: `renderFight`, `drawTopHud`, `drawBottomHud`;
   - этаж: `genFloor` = `layoutFloor` (пояса комнат в координатах u вдоль пути / v поперёк, 0…`MAP_V`)
     + `linkBands` (двери только между соседними поясами, где стены перекрываются ≥ `DOOR_MIN`) + `assignRooms`
@@ -45,6 +49,8 @@
 
 - Броня: `armor` в данных = число частей; спрайтов может быть меньше (`spriteIndex`).
 - Фазы босса = `armor + 1`, меняются на каждой сломанной части (`applyPhase`).
+- Выносливость противниц восстанавливается всегда (`stamRegen`), парирование и связка сфер останавливают это
+  на 2 с (`e.regenStop`); обычные удары восстановление не останавливают.
 - Без брони (`isLastStage`) урон ×`D.broken.dmgMul`, противница не сдаётся: бой до 0 здоровья (`defeated`)
   или до захвата кругом (шанс `captureChance`, неудача = `heroSlash`). Здоровье кончилось раньше брони — `escaped`.
 - Цели длительности боя: рядовой равного уровня 25–60 с (не дольше 2 мин), слабее героя 10–25 с,
@@ -54,7 +60,9 @@
 - Репозиторий публичный: только безопасные (R) спрайты.
 - Проверка: headless Chromium через Playwright, хук `window.__proto` (`startFight`, `startRun`,
   `press/move/release`, `circle`, `captureChance`, `guardCenter`, `chooseDoor`, `chooseNode`, `genFloor`,
-  `fightWith(ids, h, e)` — групповой бой, `startExplore`, `genDungeon`, `exGoTo`).
+  `fightWith(ids, h, e)` — групповой бой, `startExplore`, `genDungeon`, `exGoTo`, `setAuto`, `setSpeed`,
+  `fastForward(сек)` — прокрутить игровое время мгновенно; с автобоем бой считается за ~20 мс).
+  Ускорение вручную: `index.html?speed=4`. Балансные прогоны — автобой + `fastForward`, а не ожидание в реальном времени.
 - Групповой бой: прямо атакует только передняя; задние только помогают. Новая механика боя должна работать
   и для одной, и для нескольких противниц (одиночный бой — частный случай группы).
 - Отряд: бонус задаётся видом противницы; обычная — 1 бонус и 1 слот, элита/босс — до 3; одна спутница — один слот.

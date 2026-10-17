@@ -50,14 +50,19 @@ window.GAME_DATA = {
   //   parry — окно парирования +секунды · block — блок пропускает на долю меньше · hp — +здоровье в каждом бою
   //   regen — выносливость восстанавливается быстрее на долю · spheres — сферы растут медленнее на долю
   //   stamina — +выносливость
+  // portrait у героини — где на спрайте голова (доли ширины x и высоты y, size — высота кадра):
+  // по нему вырезаются портреты отряда. Без него голова ищется по силуэту (если браузер даёт читать пиксели).
   squad: ['attack', 'defense', 'support'],
 
+  // stamRegen — сколько выносливости противница восстанавливает в секунду: медленно, но всегда;
+  // парирование её удара и связка сфер останавливают восстановление на 2 с
   enemies: {
     bunny: {
       name: 'Крольчиха', subtitle: 'Стесняшка с морковкой', kind: 'normal',
       sprites: ['assets/bunny/stage1.png'], armor: 2, chest: 0.66,
-      hp: 1050, stamina: 140, stamRegen: 7, xp: 50,
+      hp: 1050, stamina: 140, stamRegen: 3, xp: 50,
       companion: { support: { bonus: 'regen', value: 0.25 } },
+      portrait: { x: 0.476, y: 0.11 },
       attack: { dmg: 6, telegraph: 0.85, follow: 0.65, interval: [1.6, 2.6], strikes: [1, 2] },
       spheres: { every: [6, 8], count: [2, 3], grow: [3.4, 4.4], elements: ['electric'] },
       about: 'Пугается и бьёт часто, но слабо, иногда дважды подряд. Электрические сферы: шок срывает три следующих удара.'
@@ -65,8 +70,9 @@ window.GAME_DATA = {
     miko: {
       name: 'Лиса-жрица', subtitle: 'Хранительница лисьих огней', kind: 'normal',
       sprites: ['assets/miko/stage1.png'], armor: 2, chest: 0.7,
-      hp: 1250, stamina: 170, stamRegen: 6, xp: 60,
+      hp: 1250, stamina: 170, stamRegen: 2.5, xp: 60,
       companion: { defense: { bonus: 'parry', value: 0.08 } },
+      portrait: { x: 0.3, y: 0.112 },
       attack: { dmg: 12, telegraph: 1.1, follow: 0.8, interval: [2.2, 3.2], strikes: [1, 2] },
       spheres: { every: [5.5, 7], count: [2, 3], grow: [3.4, 4.4], elements: ['fire', 'fire', 'ice'] },
       about: 'Неторопливая и спокойная: долгий замах, удобно парировать. Часто зажигает лисьи огни — огненные и ледяные сферы.'
@@ -74,8 +80,9 @@ window.GAME_DATA = {
     wolf: {
       name: 'Волчица', subtitle: 'Вожак стаи', kind: 'elite',
       sprites: ['assets/wolf/stage1.png'], armor: 2, chest: 0.7, rage: true,
-      hp: 2100, stamina: 290, stamRegen: 7, xp: 140,
+      hp: 2100, stamina: 290, stamRegen: 3, xp: 140,
       companion: { attack: { bonus: 'dmg', value: 0.15 }, defense: { bonus: 'block', value: 0.3 } },
+      portrait: { x: 0.653, y: 0.103 },
       attack: { dmg: 10, telegraph: 0.85, follow: 0.7, interval: [1.9, 2.8], strikes: [1, 3] },
       spheres: { every: [9, 11], count: [2, 2], grow: [3.6, 4.4], elements: ['ice'] },
       about: 'Мини-босс. Серии до трёх ударов. Каждая сломанная часть брони приводит её в ярость: атакует чаще.'
@@ -83,8 +90,9 @@ window.GAME_DATA = {
     nekomata: {
       name: 'Нэкомата', subtitle: 'Двухвостая повариха подземелья', kind: 'boss',
       sprites: ['assets/nekomata/stage1.png'], armor: 2, chest: 0.68, theme: 'spirit', hazard: 'wisps',
-      hp: 4600, stamina: 600, stamRegen: 8, xp: 0,
+      hp: 4600, stamina: 600, stamRegen: 3.5, xp: 0,
       companion: { attack: { bonus: 'charge', value: 0.25 }, defense: { bonus: 'hp', value: 30 }, support: { bonus: 'spheres', value: 0.25 } },
+      portrait: { x: 0.483, y: 0.114 },
       attack: { dmg: 11, telegraph: 1.05, follow: 0.8, interval: [2.2, 3.2], strikes: [1, 2] },
       spheres: { every: [7, 9], count: [2, 3], grow: [3.6, 4.4], elements: ['ghost', 'ghost', 'fire'] },
       // Фаза меняется на каждой сломанной части брони

@@ -94,10 +94,10 @@
   }
   .slot.on { border-color: var(--gold); }
   .slot .portrait {
-    height: calc(var(--u)*84); background: radial-gradient(ellipse at 50% 30%, #3a2c3a, #120e16);
+    aspect-ratio: 1.6; background: radial-gradient(ellipse at 50% 30%, #3a2c3a, #120e16);
     display: flex; align-items: flex-start; justify-content: center; overflow: hidden;
   }
-  .slot .portrait img { width: 150%; object-fit: cover; object-position: top; pointer-events: none; }
+  .slot .portrait .face { width: 100%; height: 100%; background-repeat: no-repeat; pointer-events: none; }
   .slot .portrait .q { margin: auto; font-family: var(--display); font-size: calc(var(--u)*30); color: #6f6578; }
   .slot .sl { margin-top: calc(var(--u)*6); font-size: calc(var(--u)*10.5); letter-spacing: .08em; text-transform: uppercase; color: var(--gold-dim); }
   .slot .nm { font-family: var(--display); font-size: calc(var(--u)*15); color: var(--gold); margin-top: calc(var(--u)*2); }

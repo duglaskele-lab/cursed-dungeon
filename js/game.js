@@ -329,7 +329,9 @@
   }
 
   // ---------------------------------------------------------------- состояние игры
-  const G = { mode: 'loading', paused: false, panelOpen: false, time: 0, selected: 'miko', heroLvl: 1, enemyLvl: 1, count: 1 };
+  const G = { mode: 'loading', paused: false, panelOpen: false, time: 0, selected: 'miko', heroLvl: 1, enemyLvl: 1, count: 1, speed: 1 };
+  // ускоренный режим для проверок: index.html?speed=4 — логика идёт в 4 раза быстрее
+  try { G.speed = clamp(Math.round(Number(new URLSearchParams(location.search).get('speed')) || 1), 1, 16); } catch (e) { /* ignore */ }
   let fight = null;
   let run = null;
   const input = { down: false, id: null, x: 0, y: 0, sx: 0, sy: 0, downT: 0, downReal: 0, path: [], swiping: false, guardPress: false, lastTapT: -9 };
@@ -374,6 +376,48 @@
     }
     return m;
   }
+  // Портрет спутницы: кадр вокруг головы. Голову ищем по силуэту первой стадии спрайта
+  // (верх непрозрачной области, центр по горизонтали в полосе головы). Если чтение пикселей
+  // недоступно (file:// в Chrome), берётся середина верха. Поправить вручную: portrait: { x, y, size }
+  // у героини в data.js — доли ширины и высоты спрайта.
+  const portraitCache = {};
+  function portraitSpot(id) {
+    if (portraitCache[id]) return portraitCache[id];
+    const st = assets[id] && assets[id].stages[0], ed = D.enemies[id];
+    if (!st) return null;
+    let x = 0.5, y = 0.12, size = 0.21;
+    try {
+      const S = 4, mw = Math.ceil(st.w / S), mh = Math.ceil(st.h / S);
+      const c = document.createElement('canvas'); c.width = mw; c.height = mh;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(st.img, 0, 0, mw, mh);
+      const d = g.getImageData(0, 0, mw, mh).data, solid = (px, py) => d[(py * mw + px) * 4 + 3] > 100;
+      let top = -1;
+      for (let py = 0; py < mh && top < 0; py++) for (let px = 0; px < mw; px++) if (solid(px, py)) { top = py; break; }
+      if (top >= 0) {
+        let sx = 0, n = 0;
+        for (let py = top + Math.round(mh * 0.04); py < Math.min(mh, top + Math.round(mh * 0.15)); py++) for (let px = 0; px < mw; px++) if (solid(px, py)) { sx += px; n++; }
+        if (n) x = sx / n / mw;
+        y = top / mh + 0.1;
+      }
+    } catch (e) { /* пиксели недоступны — остаётся середина верха */ }
+    const o = ed.portrait || {};
+    portraitCache[id] = { x: o.x != null ? o.x : x, y: o.y != null ? o.y : y, size: o.size || size };
+    return portraitCache[id];
+  }
+  // прямоугольник кадра в пикселях спрайта для окна с соотношением сторон aspect (ширина/высота)
+  function portraitRect(id, aspect) {
+    const p = portraitSpot(id), st = assets[id].stages[0];
+    const h = Math.min(st.h, p.size * st.h), w = Math.min(st.w, h * aspect);
+    return { x: clamp(p.x * st.w - w / 2, 0, st.w - w), y: clamp(p.y * st.h - h / 2, 0, st.h - h), w, h, iw: st.w, ih: st.h };
+  }
+  // то же для HTML: фон-картинка с нужным масштабом и сдвигом
+  function portraitStyle(id, aspect) {
+    const r = portraitRect(id, aspect), D_ = D.enemies[id];
+    const px = r.iw > r.w ? r.x / (r.iw - r.w) * 100 : 50, py = r.ih > r.h ? r.y / (r.ih - r.h) * 100 : 0;
+    return `background-image:url('${D_.sprites[0]}');background-size:${(r.iw / r.w * 100).toFixed(1)}% auto;background-position:${px.toFixed(1)}% ${py.toFixed(1)}%`;
+  }
+
   function setSquad(slot, id) {
     for (const s of D.squad) if (id && save.squad[s] === id) save.squad[s] = null;   // одна спутница — один слот
     save.squad[slot] = id;
@@ -414,7 +458,7 @@
       dmgScale: (1 + 0.18 * lv) * mul.dmg,
       atk: { ...ed.attack }, sph: { ...ed.spheres }, vinesCfg: null, phase: 0,
       stage: 0, parts: armorParts(ed, st.length), state: 'idle', st: 0,
-      nextAttack: rand(1.4, 2.2), strikesLeft: 0, telDur: 0, lastStamHit: -9,
+      nextAttack: rand(1.4, 2.2), strikesLeft: 0, telDur: 0, regenStop: -9,
       nextSpheres: rand(3, 5), nextWeak: rand(3, 5), nextVine: rand(3, 5), lastStand: false,
       burn: 0, burnDps: 0, burnTick: 0,
       anim: { white: 0, lunge: 0, knock: 0, sx: 1, sy: 1 }
@@ -567,7 +611,6 @@
   }
   function enemyStamina(e, amount) {
     e.stam = Math.max(0, e.stam - amount);
-    e.lastStamHit = fight.t;
   }
   function addCombo(h) { h.combo++; h.maxCombo = Math.max(h.maxCombo, h.combo); }
 
@@ -889,6 +932,7 @@
       fight.fx.shields.push({ x: c.x, y: c.y, r: GUARD_R, t: 0, life: 0.5, color: '#9fffc9' });
       enemyStamina(e, 14 * h.stamPower);
       fight.stats.parries++;
+      e.regenStop = fight.t;
       addCombo(h);
       if (hasRelic(h, 'fang')) h.chargeT = CHARGE_FULL;
       floatText(L.cx, L.chestY - 30, t('fight.parry'), '#bfefff', 34, 1.1, -40);
@@ -1076,6 +1120,7 @@
       for (const s of hit) popSphere(s, true);
       if (enemyActive(e)) enemyStamina(e, amount);
       fight.stats.links++;
+      e.regenStop = fight.t;
       addCombo(fight.hero);
       floatText(hit[n - 1].x, hit[n - 1].y - 30, t('fight.link', { n, amount }), '#ffe9a8', 24);
       sfx.link();
@@ -1205,7 +1250,8 @@
     a.sy = lerp(a.sy, 1, Math.min(1, rdt * 14));
     if (e.state === 'leaving') { e.st += rdt; return; }
     if (dt === 0) return;
-    if (e.state !== 'stun' && fight.t - e.lastStamHit > 2) e.stam = Math.min(e.stamMax, e.stam + ed.stamRegen * dt);
+    // выносливость медленно восстанавливается всегда; парирование и связка сфер останавливают это на 2 с
+    if (e.state !== 'stun' && fight.t - e.regenStop > 2) e.stam = Math.min(e.stamMax, e.stam + ed.stamRegen * dt);
     if (e.burn > 0 && enemyActive(e)) {
       e.burn -= dt; e.burnTick += dt;
       e.hp = Math.max(0, e.hp - e.burnDps * dt);
@@ -1342,6 +1388,7 @@
     drawBottomHud();
     drawBanner();
     drawSwipe();
+    drawSquadTip();
   }
 
   // Близкий кадр: 0 — обычный вид, 1 — полное приближение (наезд 0,3 с, отъезд 0,5 с)
@@ -1857,23 +1904,23 @@
     if (h.entangled > 0) pill(t('pill.hazard', { name: fight.hazard.status, s: h.entangled.toFixed(1) }), fight.hazard.color);
 
     D.squad.forEach((slot, i) => {
-      const x = 20 + i * 54, y = y0 + 138, id = squadMember(slot);
+      const R = squadSlotRect(i), x = R.x0, y = R.y0, w = R.x1 - R.x0, hh = R.y1 - R.y0, id = squadMember(slot);
       if (id && assets[id]) {
-        // портрет спутницы: верх спрайта
-        const st = assets[id].stages[0], sw = st.w * 0.42, sh = sw * 40 / 44;
-        ctx.save(); ctx.fillStyle = '#241a28'; roundRect(x, y, 44, 40, 8); ctx.fill(); ctx.clip();
-        ctx.drawImage(st.img, (st.w - sw) / 2, st.h * 0.02, sw, sh, x, y, 44, 40);
+        const pr = portraitRect(id, w / hh);
+        ctx.save(); ctx.fillStyle = '#241a28'; roundRect(x, y, w, hh, 9); ctx.fill(); ctx.clip();
+        ctx.drawImage(assets[id].stages[0].img, pr.x, pr.y, pr.w, pr.h, x, y, w, hh);
+        ctx.fillStyle = 'rgba(8,6,12,.72)'; ctx.fillRect(x, y + hh - 15, w, 15);
         ctx.restore();
-        ctx.strokeStyle = 'rgba(233,194,122,.8)'; ctx.lineWidth = 1.5; roundRect(x, y, 44, 40, 8); ctx.stroke();
+        ctx.strokeStyle = 'rgba(233,194,122,.85)'; ctx.lineWidth = 1.5; roundRect(x, y, w, hh, 9); ctx.stroke();
       } else {
-        ctx.fillStyle = 'rgba(255,255,255,.04)'; roundRect(x, y, 44, 40, 8); ctx.fill();
-        ctx.strokeStyle = 'rgba(233,194,122,.25)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]); roundRect(x, y, 44, 40, 8); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = '#6f6578'; ctx.font = `600 16px ${displayFont}`; ctx.textAlign = 'center'; ctx.fillText('?', x + 22, y + 26);
+        ctx.fillStyle = 'rgba(255,255,255,.04)'; roundRect(x, y, w, hh, 9); ctx.fill();
+        ctx.strokeStyle = 'rgba(233,194,122,.25)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]); roundRect(x, y, w, hh, 9); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#6f6578'; ctx.font = `600 20px ${displayFont}`; ctx.textAlign = 'center'; ctx.fillText('?', x + w / 2, y + hh / 2 + 2);
       }
-      ctx.fillStyle = id ? '#d8ccb6' : '#6f6578'; ctx.textAlign = 'center';
-      fitText(t('slot.' + slot), x + 22, y + 52, 52, 10);
+      ctx.fillStyle = id ? '#e9dcc4' : '#6f6578'; ctx.textAlign = 'center';
+      fitText(t('slot.' + slot), x + w / 2, y + hh - 4, w - 4, 10);
     });
-    drawSeals(196, y0 + 152, h.seals, h.sealsMax);
+    drawSeals(244, y0 + 152, h.seals, h.sealsMax);
 
     const cx = 456, cy = y0 + 90, r = 42;
     const m = chargeMult(h);
@@ -1917,6 +1964,27 @@
     const w = ctx.measureText(text).width;
     if (w > maxW) ctx.font = `${weight} ${Math.max(9, size * maxW / w).toFixed(1)}px ${bodyFont}`;
     ctx.fillText(text, x, y);
+  }
+
+  // Слоты отряда внизу боевого экрана
+  function squadSlotRect(i) { const x0 = 20 + i * 72, y0 = HUD_BOTTOM + 130; return { x0, y0, x1: x0 + 66, y1: y0 + 60 }; }
+  // Подсказка над портретом: при наведении мышью или после касания портрета
+  function drawSquadTip() {
+    let i = -1;
+    if (G.slotTip && G.slotTip.until > G.time) i = G.slotTip.i;
+    else if (G.hover) i = D.squad.findIndex((_, k) => inRect(squadSlotRect(k), G.hover));
+    const slot = D.squad[i], id = slot && squadMember(slot);
+    if (!id) return;
+    const R = squadSlotRect(i), lines = [`${D.enemies[id].name} · ${t('slot.' + slot)}`, cap(bonusText(slotBonus(id, slot)))];
+    ctx.save();
+    ctx.font = `600 13px ${bodyFont}`;
+    const w = Math.min(W - 24, Math.max(...lines.map((s) => ctx.measureText(s).width)) + 24), hh = 50;
+    const x = clamp(R.x0, 12, W - 12 - w), y = R.y0 - hh - 8;
+    ctx.fillStyle = 'rgba(14,10,18,.95)'; roundRect(x, y, w, hh, 10); ctx.fill();
+    ctx.strokeStyle = 'rgba(233,194,122,.6)'; ctx.lineWidth = 1; roundRect(x, y, w, hh, 10); ctx.stroke();
+    ctx.textAlign = 'left'; ctx.fillStyle = '#e9c27a'; ctx.fillText(lines[0], x + 12, y + 20);
+    ctx.fillStyle = '#d8ccb6'; ctx.font = `500 12.5px ${bodyFont}`; ctx.fillText(lines[1], x + 12, y + 39);
+    ctx.restore();
   }
 
   function drawSeals(x0, y, n, max) {
@@ -3231,7 +3299,11 @@
     if (G.paused) return false;
     if (G.mode === 'map') { mapPointer(p); return false; }
     if (G.mode === 'explore') { if (run) explorePointer(p); return false; }
-    if (G.mode !== 'fight' || !fight || input.down || G.auto) return false;      // при автобое касания не мешают компьютеру
+    if (G.mode !== 'fight' || !fight || input.down) return false;
+    // касание портрета спутницы показывает её бонус и не считается ударом
+    const si = D.squad.findIndex((s, k) => squadMember(s) && inRect(squadSlotRect(k), p));
+    if (si >= 0) { G.slotTip = { i: si, until: G.time + 2.5 }; return false; }
+    if (G.auto) return false;      // при автобое касания не мешают компьютеру
     input.down = true; input.id = id;
     input.x = input.sx = p.x; input.y = input.sy = p.y;
     input.downT = fight.t; input.downReal = performance.now();
@@ -3242,6 +3314,7 @@
     return true;
   }
   function onMove(p, id) {
+    G.hover = p;
     BG.tx = clamp((p.x / W - 0.5) * 2, -1, 1);
     BG.ty = clamp((p.y / H - 0.5) * 2, -1, 1);
     if (!input.down || id !== input.id) return;
@@ -3326,7 +3399,8 @@
       const id = squadMember(slot), e = id && D.enemies[id];
       const b = document.createElement('button');
       b.className = 'slot' + (id ? ' on' : '');
-      b.innerHTML = `<div class="portrait">${e ? `<img src="${e.sprites[0]}" alt="">` : '<span class="q">?</span>'}</div>
+      if (e) b.title = `${e.name} · ${t('slot.' + slot)}: ${bonusText(slotBonus(id, slot))}`;
+      b.innerHTML = `<div class="portrait">${e ? `<div class="face" style="${portraitStyle(id, 1.6)}"></div>` : '<span class="q">?</span>'}</div>
         <div class="sl">${t('slot.' + slot)}</div><div class="nm">${e ? e.name : t('squad.empty')}</div><div class="bn">${e ? cap(bonusText(slotBonus(id, slot))) : ''}</div>`;
       b.addEventListener('click', () => { sfx.ensure(); pickCompanion(slot, () => { hidePanel(); buildMenu(); }); });
       sq.appendChild(b);
@@ -3471,6 +3545,10 @@
     else if (G.mode === 'map' && run) renderMap();
     else if (G.mode === 'explore' && run) renderExplore();
     else { drawBackground('dungeon', G.time); drawForeground('dungeon'); }
+    if (G.speed > 1) {
+      ctx.textAlign = 'left'; ctx.font = `700 13px ${bodyFont}`; ctx.fillStyle = '#ffd060';
+      ctx.fillText('▶▶ ×' + G.speed, 12, H - 30);
+    }
   }
   let last = performance.now();
   // кнопка автобоя видна только в идущем бою
@@ -3484,7 +3562,7 @@
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     syncAutoBtn();
-    if (!G.paused) update(dt);
+    if (!G.paused) for (let i = 0; i < G.speed; i++) update(dt);      // ускоренный режим — несколько шагов за кадр
     render();
     requestAnimationFrame(frame);
   }
@@ -3570,6 +3648,18 @@
     captureChance: () => (fight ? captureChance(fight.enemy) : 0),
     guardCenter: () => guardCenter(),
     setAuto: (v) => { G.auto = !!v; },
+    portraitSpot: (id) => { delete portraitCache[id]; return portraitSpot(id); },
+    // ускорение: setSpeed(n) — n шагов логики за кадр; fastForward(сек) — сразу прокрутить игровое время
+    // без отрисовки (останавливается, когда бой закончился и показаны итоги)
+    setSpeed: (n) => { G.speed = clamp(Math.round(n) || 1, 1, 16); },
+    fastForward: (sec, step = 1 / 60) => {
+      let done = 0;
+      for (; done < sec; done += step) {
+        update(step);
+        if (G.mode === 'fight' && fight && fight.resultShown) break;
+      }
+      return done;
+    },
     next: afterRunFight
   };
   boot();
