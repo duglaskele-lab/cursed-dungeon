@@ -63,7 +63,7 @@ function heroTap(x, y) {
   const charged = mult >= CHARGED;
   let crit = false;
   if (fight.weak && dist(x, y, fight.weak.x, fight.weak.y) < 44) {
-    crit = true; mult *= hasRelic(h, 'claw') ? 3 : 2;
+    crit = true; mult *= relicMod(h, 'critMul', 2);
     enemyStamina(e, 8 * h.stamPower);
     burst(fight.weak.x, fight.weak.y, 22, ['#ffe9a8', '#ffd060', '#fff'], 340, 0.6, 5, 200);
     fight.weak = null;
@@ -79,7 +79,7 @@ function heroTap(x, y) {
   burst(x, y, charged ? 16 : 7, charged ? ['#ffd8a0', '#ffffff', '#ff9a50'] : ['#ffffff', '#f3e3c0'], charged ? 320 : 200, 0.4, 3.5, 200);
   if (charged) {
     fight.hitStop = 0.07; fight.shake = Math.max(fight.shake, 7);
-    if (hasRelic(h, 'ember')) { e.burn = 3; e.burnDps = e.hpMax * 0.04 / 3; }
+    relicEvent(h, 'chargedHit', { enemy: e });
   }
   if (fight.over) return;
   if (charged) tryBreak(e);
@@ -106,7 +106,7 @@ function heroSlash(path, hitFront = true, backs = []) {
   for (const b of backs) slashBack(b, mult, ex);
   if (hitFront && !fight.over) {
     let crit = false;
-    if (fight.weak && pathHitsCircle(path, fight.weak.x, fight.weak.y, 40)) { crit = true; mult *= hasRelic(h, 'claw') ? 3 : 2; enemyStamina(e, 8 * h.stamPower); fight.weak = null; }
+    if (fight.weak && pathHitsCircle(path, fight.weak.x, fight.weak.y, 40)) { crit = true; mult *= relicMod(h, 'critMul', 2); enemyStamina(e, 8 * h.stamPower); fight.weak = null; }
     const dmg = h.dmg * 1.3 * h.mods.slashMul * levelMod(h.lvl, e.lvl) * mult * armorBonus(e) * ex * rand(0.92, 1.08);
     const mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2;
     damageEnemy(dmg, mx, my - 20, crit ? '#ffd060' : '#9fe3ff', true);
@@ -350,7 +350,7 @@ function enemyImpact(e) {
     fight.stats.parries++;
     e.regenStop = fight.t;
     addCombo(h);
-    if (hasRelic(h, 'fang')) h.chargeT = CHARGE_FULL;
+    relicEvent(h, 'parry');
     floatText(L.cx, L.chestY - 30, t('fight.parry'), '#bfefff', 34, 1.1, -40);
     burst(L.cx, L.chestY + 60, 30, ['#ffffff', '#bfefff', '#7fd8ff'], 420, 0.5, 4, 100);
     fight.shake = Math.max(fight.shake, 6);
@@ -390,7 +390,7 @@ function hurtHero(dmg, flash) {
 function spawnSpheres(e) {
   const sd = e.sph;
   const n = randi(sd.count[0], sd.count[1]);
-  const slow = (hasRelic(fight.hero, 'bell') ? 1.3 : 1) * fight.hero.mods.sphereSlow;
+  const slow = fight.hero.mods.sphereSlow;
   for (let i = 0; i < n && fight.spheres.length < 5; i++) {
     let x, y, ok = false;
     for (let tries = 0; tries < 30 && !ok; tries++) {
@@ -540,7 +540,7 @@ function resolveSwipe(path) {
     addCombo(fight.hero);
     floatText(hit[n - 1].x, hit[n - 1].y - 30, t('fight.link', { n, amount }), '#ffe9a8', 24);
     sfx.link();
-    if (n >= 3 && hasRelic(fight.hero, 'moon')) tryBreak(e);
+    relicEvent(fight.hero, 'sphereLink', { enemy: e, n });
     return;
   }
   if (e.state === 'telegraph') {

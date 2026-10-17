@@ -163,7 +163,7 @@ function startRun() {
     floor: genFloor(),
     cur: null, path: [], scout: D.floor.scout || 1,
     hero: newRunHero(),
-    captured: [], fights: 0, time: 0, events: shuffle(EVENTS.map((e) => e.id)), trans: null, doors: [], mapHits: []
+    captured: [], fights: 0, time: 0, events: shuffle(D.events.map((e) => e.id)), trans: null, doors: [], mapHits: []
   };
   run.cur = run.floor.start;
   run.path = [run.cur];

@@ -521,6 +521,19 @@ function bottomPanel(y0) {
   ctx.beginPath(); ctx.moveTo(20, y0 + 22); ctx.lineTo(W - 20, y0 + 22); ctx.stroke();
 }
 
+// Иконки реликвий в ряд, каждая в ячейке, как в инвентаре; align 'right' — ряд заканчивается в x
+function drawRelicIcons(ids, x, y, size, align = 'left') {
+  const gap = 3, w = ids.length * (size + gap) - gap;
+  let x0 = align === 'right' ? x - w : x;
+  for (const id of ids) {
+    ctx.fillStyle = '#120d09'; ctx.fillRect(x0, y, size, size);
+    ctx.strokeStyle = 'rgba(160,125,60,.85)'; ctx.lineWidth = 1; ctx.strokeRect(x0 + 0.5, y + 0.5, size - 1, size - 1);
+    if (relicImgs[id]) ctx.drawImage(relicImgs[id], x0 + 1, y + 1, size - 2, size - 2);
+    x0 += size + gap;
+  }
+  return w;
+}
+
 function drawBottomHud() {
   const f = fight, h = f.hero;
   const y0 = HUD_BOTTOM;
@@ -531,7 +544,7 @@ function drawBottomHud() {
   ctx.fillStyle = '#b9ae9c'; ctx.font = `500 13px ${bodyFont}`;
   ctx.fillText(t('lvl', { n: h.lvl }), hx, y0 + 48);
   hx += ctx.measureText(t('lvl', { n: h.lvl })).width + 12;
-  if (h.relics.length) { ctx.fillStyle = '#c9b6f0'; ctx.fillText(t('hud.relics', { n: h.relics.length }), hx, y0 + 48); }
+  if (h.relics.length) drawRelicIcons(h.relics, hx, y0 + 31, 21);
 
   bar(20, y0 + 56, 300, 16, h.hp / h.hpMax, h.hp / h.hpMax < 0.3 ? '#d9473f' : '#5fbf6a');
   ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.font = `600 11px ${bodyFont}`;

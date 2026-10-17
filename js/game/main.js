@@ -117,6 +117,8 @@ window.__proto = {
     onRelease(99);
   },
   bonusKinds: Object.keys(BONUS),
+  relicHooks: Object.keys(RELICS), eventFx: Object.keys(EVENT_FX), addRelic, applyUpgrade, eventOutcome,
+  enemyImpact: () => enemyImpact(fight.enemy),
   captureChance: () => (fight ? captureChance(fight.enemy) : 0),
   guardCenter: () => guardCenter(),
   setAuto: (v) => { G.auto = !!v; },

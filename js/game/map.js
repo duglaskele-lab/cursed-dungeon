@@ -165,9 +165,8 @@ function drawMapTopHud() {
   ctx.textAlign = 'left'; ctx.fillStyle = '#b9ae9c'; ctx.font = `500 11.5px ${bodyFont}`;
   ctx.fillText(t('map.xp', { xp: rh.xp, need }), 20, 92);
   drawSeals(150, 92, rh.seals, rh.sealsMax);
-  ctx.textAlign = 'right'; ctx.fillStyle = '#c9b6f0';
-  const names = rh.relics.map((id) => D.relics.find((r) => r.id === id).name);
-  ctx.fillText(names.length ? names.slice(-2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '') : t('map.noRelics'), W - 20, 92);
+  if (rh.relics.length) drawRelicIcons(rh.relics, W - 20, 79, 19, 'right');
+  else { ctx.textAlign = 'right'; ctx.fillStyle = '#c9b6f0'; ctx.fillText(t('map.noRelics'), W - 20, 92); }
 }
 
 // ---------------------------------------------------------------- этаж: план подземелья

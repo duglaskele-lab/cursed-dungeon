@@ -22,6 +22,6 @@ jobs:
           pip install -r tests/requirements.txt
           python -m playwright install --with-deps chromium
       - name: JS syntax
-        run: for f in js/*.js js/lang/*.js; do node --check "$f"; done
+        run: find js -name '*.js' -print0 | xargs -0 -n1 node --check
       - name: Tests
         run: python -m pytest

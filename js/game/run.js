@@ -1,4 +1,4 @@
-// Забег: комнаты enterNode, награды после боя, привал, события EVENTS, конец забега.
+// Забег: комнаты enterNode, награды после боя, привал, события (D.events + EVENT_FX), конец забега.
 'use strict';
 
 function enterNode(node) {
@@ -28,7 +28,7 @@ function enterNode(node) {
       if (!opts.length) { grantXp(40); showPanel({ kicker: t('tr.kicker'), title: t('tr.emptyTitle'), text: t('tr.emptyText'), choices: [{ title: t('next'), on: roomDone }] }); break; }
       showPanel({
         kicker: t('tr.kicker'), title: t('tr.title'), text: t('tr.text'),
-        choices: opts.map((r) => ({ title: r.name, desc: r.text, cls: 'relic', ck: t('ck.relic'), on: () => { addRelic(r.id); roomDone(); } }))
+        choices: opts.map((r) => ({ title: r.name, desc: r.text, cls: 'relic', icon: relicIcon(r.id), ck: t('ck.relic'), on: () => { addRelic(r.id); roomDone(); } }))
       });
       break;
     }
@@ -80,7 +80,7 @@ function afterRunFight() {
   lines.push('', t('reward.pick'));
   const choices = [];
   const rel = relicChoices(1)[0];
-  if (rel) choices.push({ title: rel.name, desc: rel.text, cls: 'relic', ck: t('ck.relic'), on: () => { addRelic(rel.id); roomDone(); } });
+  if (rel) choices.push({ title: rel.name, desc: rel.text, cls: 'relic', icon: relicIcon(rel.id), ck: t('ck.relic'), on: () => { addRelic(rel.id); roomDone(); } });
   const up = pick(D.upgrades);
   choices.push({ title: up.name, desc: up.text, ck: t('ck.upgrade'), on: () => { applyUpgrade(up.id); roomDone(); } });
   if (rh.seals < 4) choices.push({ title: t('reward.seal'), desc: t('reward.sealDesc', { n: rh.seals }), ck: t('ck.seal'), on: () => { rh.seals++; rh.sealsMax = Math.max(rh.sealsMax, rh.seals); roomDone(); } });
@@ -110,21 +110,12 @@ function heal(frac) { const rh = run.hero; rh.hp = Math.min(rh.hpMax, Math.round
 
 function relicChoices(n) { return shuffle(D.relics.filter((r) => !run.hero.relics.includes(r.id))).slice(0, n); }
 function addRelic(id) {
-  const rh = run.hero;
-  rh.relics.push(id);
-  if (id === 'seal') { rh.seals++; rh.sealsMax++; }
-  if (id === 'heart') { rh.hpMax += 25; rh.hp += 25; }
-  if (id === 'belt') rh.mods.tapCostMul *= 0.7;
+  run.hero.relics.push(id);
+  grantPerk(run.hero, relicDef(id));
 }
 function applyUpgrade(id) {
-  const rh = run.hero, m = rh.mods;
-  rh.upgrades.push(id);
-  if (id === 'dmg') m.dmgMul *= 1.12;
-  if (id === 'charge') m.chargeSpeed *= 1.2;
-  if (id === 'parry') m.parryBonus += 0.08;
-  if (id === 'stam') m.stamAdd += 20;
-  if (id === 'regen') m.regenMul *= 1.25;
-  if (id === 'hp') { rh.hpMax += 15; rh.hp = Math.min(rh.hpMax, rh.hp + 15); }
+  run.hero.upgrades.push(id);
+  grantPerk(run.hero, D.upgrades.find((u) => u.id === id));
 }
 
 function showRest() {
@@ -147,64 +138,43 @@ function showUpgradePick(title, text) {
   showPanel({ kicker: t('up.kicker'), title, text, choices: ups.map((u) => ({ title: u.name, desc: u.text, ck: t('ck.upgrade'), on: () => { applyUpgrade(u.id); roomDone(); } })) });
 }
 
-const EVENTS = [
-  {
-    id: 'camp', title: t('ev.camp.title'),
-    text: t('ev.camp.text'),
-    choices: [
-      { title: t('ev.camp.search'), desc: t('ev.camp.searchDesc'), act: () => {
-        if (Math.random() < 0.65) { run.hero.seals++; run.hero.sealsMax = Math.max(run.hero.sealsMax, run.hero.seals); return t('ev.camp.searchOk'); }
-        run.hero.hp = Math.max(1, run.hero.hp - 12); return t('ev.camp.searchBad');
-      } },
-      { title: t('ev.camp.sit'), desc: t('ev.camp.sitDesc'), act: () => { heal(0.2); return t('ev.camp.sitOut'); } }
-    ]
+// ---------------------------------------------------------------- события в комнатах «?»
+// Сами события — данные (D.events): выборы и их действия. EVENT_FX — что делает каждый вид действия;
+// out.vars — подстановки для текста итога, out.none — реликвий не осталось (текст .<выбор>None).
+const EVENT_FX = {
+  heal: (v) => heal(v),
+  hurt: (v) => { run.hero.hp = Math.max(1, run.hero.hp - v); },
+  hurtPct: (v) => { run.hero.hp = Math.max(1, Math.round(run.hero.hp - run.hero.hpMax * v)); },
+  seals: (v) => { run.hero.seals += v; run.hero.sealsMax = Math.max(run.hero.sealsMax, run.hero.seals); },
+  xp: (v, out) => { if (grantXp(v)) out.lvl = true; },
+  relic: (v, out) => {
+    const r = relicChoices(1)[0];
+    if (!r) { out.none = true; if (grantXp(D.noRelicXp)) out.lvl = true; return; }
+    addRelic(r.id); out.vars = { name: r.name, text: r.text };
   },
-  {
-    id: 'cage', title: t('ev.cage.title'), img: 'bunny',
-    text: t('ev.cage.text'),
-    choices: [
-      { title: t('ev.cage.open'), desc: t('ev.cage.openDesc'), act: () => {
-        const r = relicChoices(1)[0];
-        if (!r) { grantXp(40); return t('ev.cage.openNone'); }
-        addRelic(r.id); return t('ev.cage.openOk', { name: r.name, text: r.text });
-      } },
-      { title: t('ev.cage.pass'), desc: t('ev.cage.passDesc'), act: () => t('ev.cage.passOut') }
-    ]
-  },
-  {
-    id: 'altar', title: t('ev.altar.title'),
-    text: t('ev.altar.text'),
-    choices: [
-      { title: t('ev.altar.touch'), desc: t('ev.altar.touchDesc'), act: () => {
-        run.hero.hp = Math.max(1, Math.round(run.hero.hp - run.hero.hpMax * 0.2));
-        const lv = grantXp(100);
-        if (lv) sfx.level();
-        return t('ev.altar.touchOut') + (lv ? t('ev.altar.lvl', { n: run.hero.lvl }) : '');
-      } },
-      { title: t('ev.altar.leave'), desc: t('ev.altar.leaveDesc'), act: () => t('ev.altar.leaveOut') }
-    ]
-  },
-  {
-    id: 'whisper', title: t('ev.whisper.title'),
-    text: t('ev.whisper.text'),
-    choices: [
-      { title: t('ev.whisper.bold'), desc: t('ev.whisper.boldDesc'), act: () => {
-        const u = pick(D.upgrades); applyUpgrade(u.id);
-        return t('ev.whisper.boldOut', { name: u.name, text: u.text });
-      } },
-      { title: t('ev.whisper.quiet'), desc: t('ev.whisper.quietDesc'), act: () => { heal(0.1); return t('ev.whisper.quietOut'); } }
-    ]
-  }
-];
+  upgrade: (v, out) => { const u = pick(D.upgrades); applyUpgrade(u.id); out.vars = { name: u.name, text: u.text }; }
+};
+
+// Выполнить выбор события: действия → текст итога
+function eventOutcome(ev, c) {
+  const key = `ev.${ev.id}.${c.id}`;
+  let acts = c.do, suffix = 'Out';
+  if (c.chance !== undefined) { const ok = Math.random() < c.chance; acts = ok ? c.ok : c.bad; suffix = ok ? 'Ok' : 'Bad'; }
+  const out = { vars: {}, none: false, lvl: false };
+  for (const [kind, v] of Object.entries(acts || {})) EVENT_FX[kind](v, out);
+  if (out.lvl) sfx.level();
+  return t(key + (out.none ? 'None' : suffix), out.vars) + (out.lvl ? t('ev.lvl', { n: run.hero.lvl }) : '');
+}
 
 function showEvent() {
-  const id = run.events.shift() || pick(EVENTS).id;
-  const ev = EVENTS.find((e) => e.id === id);
+  const id = run.events.shift() || pick(D.events).id;
+  const ev = D.events.find((e) => e.id === id);
+  const img = ev.img ? D.enemies[ev.img].sprites[0] : null;
   showPanel({
-    kicker: t('ev.kicker'), title: ev.title, text: ev.text, img: ev.img ? D.enemies[ev.img].sprites[0] : null,
-    choices: ev.choices.map((c) => ({ title: c.title, desc: c.desc, on: () => {
-      const out = c.act();
-      showPanel({ kicker: t('ev.kicker'), title: ev.title, text: out, img: ev.img ? D.enemies[ev.img].sprites[0] : null, choices: [{ title: t('next'), on: roomDone }] });
+    kicker: t('ev.kicker'), title: t(`ev.${id}.title`), text: t(`ev.${id}.text`), img,
+    choices: ev.choices.map((c) => ({ title: t(`ev.${id}.${c.id}`), desc: t(`ev.${id}.${c.id}Desc`), on: () => {
+      const text = eventOutcome(ev, c);
+      showPanel({ kicker: t('ev.kicker'), title: t(`ev.${id}.title`), text, img, choices: [{ title: t('next'), on: roomDone }] });
     } }))
   });
 }

@@ -28,7 +28,8 @@ const BONUS = {
   hp: (m, v) => { m.hpAdd += v; },
   regen: (m, v) => { m.regenMul *= 1 + v; },
   spheres: (m, v) => { m.sphereSlow *= 1 + v; },
-  stamina: (m, v) => { m.stamAdd += v; }
+  stamina: (m, v) => { m.stamAdd += v; },
+  tapCost: (m, v) => { m.tapCostMul *= 1 - v; }
 };
 const ABSOLUTE = ['parry', 'hp', 'stamina'];      // value — число, а не доля
 function bonusText(b) { return t('bonus.' + b.bonus, { v: ABSOLUTE.includes(b.bonus) ? b.value : Math.round(b.value * 100) }); }
@@ -114,5 +115,4 @@ function makeHero(lvl, rh) {
     seals: rh ? rh.seals : hd.seals, sealsMax: rh ? rh.sealsMax : hd.seals
   };
 }
-const hasRelic = (h, id) => h.relics.includes(id);
 function parryWindow(h) { return { pmin: D.hero.parryMin, pmax: D.hero.parryMax + h.mods.parryBonus }; }

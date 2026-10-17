@@ -182,3 +182,14 @@ CLAUDE.md                   карта проекта для ИИ-помощни
 2. Или вручную: `python tools/prepare_sprites.py картинка.png assets/<id> --stages 1`
    (нужны `pip install pillow numpy scipy`; для белой одежды на белом фоне добавьте `--no-holes`),
    затем запись в `js/data.js` по образцу.
+
+## Как добавить реликвию, улучшение или событие
+
+- **Реликвия.** Запись в `relics` в `js/data.js`. Если эффект — числовой бонус (поля `bonus` + `value`
+  как у спутниц, `hpMax`, `seals`), кода не нужно. Особый эффект — хук в `js/game/relics.js` (`RELICS`),
+  его числа — в той же записи data.js. Иконка — `assets/relics/<id>.svg`, перевод — в `js/lang/en.js` → `content.relics`.
+- **Улучшение.** Запись в `upgrades` (`bonus` + `value` или `hpMax`) и перевод — без кода.
+- **Событие.** Запись в `events` (выборы и действия: `heal`, `hurt`, `hurtPct`, `seals`, `xp`, `relic`, `upgrade`)
+  и тексты `ev.<id>.*` в `js/lang/ru.js` и `en.js`. Схема — в комментарии над `events` в data.js.
+
+Автотесты сами проверят, что у всего есть эффект, тексты в обоих языках и иконка.

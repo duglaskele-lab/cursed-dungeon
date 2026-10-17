@@ -118,7 +118,7 @@ function startExplore() {
   };
   run = {
     mode: 'explore', ex, cur: { type: 'start', done: false }, path: [], scout: 1, hero: newRunHero(),
-    captured: [], fights: 0, time: 0, events: shuffle(EVENTS.map((e) => e.id)), trans: null, doors: [], mapHits: []
+    captured: [], fights: 0, time: 0, events: shuffle(D.events.map((e) => e.id)), trans: null, doors: [], mapHits: []
   };
   ex.walked[m.start.cy * m.w + m.start.cx] = 1;
   exReveal(ex);

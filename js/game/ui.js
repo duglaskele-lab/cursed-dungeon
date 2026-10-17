@@ -19,9 +19,10 @@ function showPanel(o) {
   box.innerHTML = '';
   for (const c of o.choices || []) {
     const b = document.createElement('button');
-    b.className = 'choice' + (c.cls ? ' ' + c.cls : '');
+    b.className = 'choice' + (c.cls ? ' ' + c.cls : '') + (c.icon ? ' has-ico' : '');
     if (c.disabled) b.disabled = true;
-    b.innerHTML = `${c.ck ? `<i class="ck">${c.ck}</i>` : ''}<b></b>${c.desc ? '<span></span>' : ''}`;
+    b.innerHTML = `${c.icon ? '<img class="ico" alt="">' : ''}${c.ck ? `<i class="ck">${c.ck}</i>` : ''}<b></b>${c.desc ? '<span></span>' : ''}`;
+    if (c.icon) b.querySelector('.ico').src = c.icon;
     b.querySelector('b').textContent = c.title;
     if (c.desc) b.querySelector('span').textContent = c.desc;
     b.addEventListener('click', () => { if (!c.disabled && c.on) { sfx.ensure(); c.on(); } });
@@ -33,6 +34,22 @@ function showPanel(o) {
   ui.panel.scrollTop = 0;
 }
 function hidePanel() { hide(ui.panel); G.panelOpen = false; if (run) show(ui.pauseBtn); }
+
+// Список реликвий забега в паузе: иконка, название, что делает
+function fillPauseRelics() {
+  const box = $('#pauseRelics'), ids = run ? run.hero.relics : [];
+  box.classList.toggle('hidden', !ids.length);
+  box.innerHTML = ids.length ? `<h2>${t('pause.relics')}</h2>` : '';
+  for (const id of ids) {
+    const r = relicDef(id), row = document.createElement('div');
+    row.className = 'relic-row';
+    row.innerHTML = '<img class="ico" alt=""><div><b></b><span></span></div>';
+    row.querySelector('img').src = relicIcon(id);
+    row.querySelector('b').textContent = r.name;
+    row.querySelector('span').textContent = r.text;
+    box.appendChild(row);
+  }
+}
 
 function buildMenu() {
   const cards = $('#cards');
@@ -122,7 +139,7 @@ ui.autoBtn.addEventListener('click', () => {
   resetInput();
 });
 $('#resumeBtn').addEventListener('click', () => { G.paused = false; hide(ui.pause); });
-ui.pauseBtn.addEventListener('click', () => { if ((G.mode === 'fight' && !fight.over) || G.mode === 'map' || G.mode === 'explore') { G.paused = true; resetInput(); buildMenu(); show(ui.pause); } });
+ui.pauseBtn.addEventListener('click', () => { if ((G.mode === 'fight' && !fight.over) || G.mode === 'map' || G.mode === 'explore') { G.paused = true; resetInput(); buildMenu(); fillPauseRelics(); show(ui.pause); } });
 $('#soundBtn').addEventListener('click', () => { sfx.toggle(); buildMenu(); });
 $('#langBtn').addEventListener('click', () => { const L = window.I18N.langs; window.I18N.setLang(L[(L.indexOf(window.I18N.lang) + 1) % L.length]); });
 $('#pauseSoundBtn').addEventListener('click', () => { sfx.toggle(); buildMenu(); });
@@ -131,7 +148,7 @@ $('#resetBtn').addEventListener('click', () => {
   save = { captured: {}, fights: [], runs: [], muted: sfx.muted, squad: emptySquad() }; writeSave(); buildMenu();
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && G.mode === 'fight' && fight && !fight.over) { G.paused = true; resetInput(); buildMenu(); show(ui.pause); }
+  if (document.hidden && G.mode === 'fight' && fight && !fight.over) { G.paused = true; resetInput(); buildMenu(); fillPauseRelics(); show(ui.pause); }
 });
 
 function startTraining() {

@@ -102,6 +102,7 @@
       'pause.title': 'Paused',
       'pause.resume': 'Resume',
       'pause.quit': 'Quit to menu',
+      'pause.relics': 'Relics',
 
       // ---------------------------------------------------------------- fight
       'fight.breath': 'Winded!',
@@ -166,7 +167,6 @@
       'hud.armor': 'armor',
       'hud.combo': 'combo',
       'hud.hero': 'Hero',
-      'hud.relics': 'relics: {n}',
       'hud.winded': 'WINDED — weak strikes',
       'hud.breaks': 'breaks armor',
       'hud.charge': 'charge',
@@ -299,7 +299,7 @@
       'ev.cage.open': 'Open the cage',
       'ev.cage.openDesc': 'Trust her.',
       'ev.cage.openNone': 'She hops away with a cry of "thank you!". XP +40.',
-      'ev.cage.openOk': 'She whispers about a stash behind a loose stone. You find a relic: {name}.\n{text}',
+      'ev.cage.openOut': 'She whispers about a stash behind a loose stone. You find a relic: {name}.\n{text}',
       'ev.cage.pass': 'Walk past',
       'ev.cage.passDesc': 'No one can be trusted in the dungeon.',
       'ev.cage.passOut': 'Her sobs echo behind you for a long time.',
@@ -308,7 +308,7 @@
       'ev.altar.touch': 'Touch the altar',
       'ev.altar.touchDesc': 'Lose 20% of your max health, but gain a lot of XP.',
       'ev.altar.touchOut': 'Pain gives way to power: you remember a hundred battles that never happened. XP +100.',
-      'ev.altar.lvl': '\nLevel up: {n}!',
+      'ev.lvl': '\nLevel up: {n}!',
       'ev.altar.leave': 'Leave',
       'ev.altar.leaveDesc': 'Better not feed the curse.',
       'ev.altar.leaveOut': 'The mark fades. The stone stays hungry.',

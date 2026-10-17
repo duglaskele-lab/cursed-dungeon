@@ -132,6 +132,7 @@ const sfx = (() => {
 
 // ---------------------------------------------------------------- ассеты
 const assets = {};
+const relicImgs = {};   // иконки реликвий для холста
 function loadImage(src) {
   return new Promise((res, rej) => {
     const i = new Image();
@@ -172,6 +173,7 @@ async function findPackStages(id, e) {
 async function loadAssets() {
   const list = Object.entries(D.enemies);
   await Promise.all(list.map(([id, e]) => findPackStages(id, e)));
+  await Promise.all(D.relics.map((r) => loadImage(relicIcon(r.id)).then((img) => { relicImgs[r.id] = img; }, () => {})));
   await Promise.all(list.map(async ([id, e]) => {
     const stages = [];
     for (const src of e.sprites) {

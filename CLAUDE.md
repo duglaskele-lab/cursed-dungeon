@@ -5,7 +5,7 @@
 
 ## Где что лежит
 
-- `js/data.js` — ВСЕ числа баланса и контент: `hero`, `elements`, `enemies`, `relics`, `upgrades`,
+- `js/data.js` — ВСЕ числа баланса и контент: `hero`, `elements`, `enemies`, `relics`, `upgrades`, `events`,
   `floor` (зоны этажа с пулами противниц, фиксированные комнаты `fixed`, веса типов комнат, разведка `scout`),
   `squad` (слоты отряда) и `companion` у героинь (бонус по слотам), `group` (сила противниц в группе),
   `explore` (режим исследования: размер, комнаты, содержимое, монументы, угроза).
@@ -19,6 +19,9 @@
   - `state.js` — состояние `G`, `fight`, `run`, `input`; стадии брони `spriteIndex`/`spriteFor`; отряд: `BONUS`
     (виды бонусов → модификаторы героя), `withSquad` (накладывает бонусы на `mods` в `makeHero`), `squadMember`/`setSquad`;
     портреты `portraitSpot`/`portraitRect`/`portraitStyle` (голова по `portrait` в data.js или по силуэту);
+  - `relics.js` — реликвии и улучшения: простые эффекты `grantPerk` (поля `bonus/value`, `hpMax`, `seals` в data.js),
+    особые — хуки `RELICS[id]`, вызываются из боя через `relicEvent(h, имя, ctx)` / `relicMod(h, имя, значение, ctx)`;
+    иконки `relicIcon` (`assets/relics/<id>.svg`), на холсте — `relicImgs` + `drawRelicIcons` (fight-render.js);
   - `foes.js` — противницы в бою: `fight.foes` (`makeFoe`), передняя `setFront` — на неё указывают `fight.enemy/ed/id/layout`;
     расстановка `foeLayout`/`layoutFoes` (цель) и `posRect` (где нарисована сейчас); эффекты (частицы, всплывающий текст);
   - `fight.js` — бой: `newFight`, `heroTap`, `heroSlash`, `guardPress`/`enemyImpact` (защита нажатием в круг удара),
@@ -36,7 +39,8 @@
   - `squad-ui.js` — выбор спутниц `pickCompanion`/`showSquadPanel`;
   - `map.js` — экран комнаты `updateMap`/`renderMap`/`drawDoor`; план подземелья `drawFloorMap` (мини и большой,
     туман `knownRooms`, статичная часть кэшируется в `mapTexture`), выбор комнаты `chooseDoor`/`chooseNode`/`mapPointer`;
-  - `run.js` — забег: `enterNode`, `afterRunFight`, `EVENTS`, `showRest`, `runComplete`/`runOver`;
+  - `run.js` — забег: `enterNode`, `afterRunFight`, `showRest`, события `showEvent`/`eventOutcome` (данные `D.events`,
+    действия `EVENT_FX`), `addRelic`/`applyUpgrade`, `runComplete`/`runOver`;
   - `explore.js` — режим исследования: `startExplore`, генерация `tryDungeon`/`genDungeon` (клетки `T_WALL/T_ROOM/T_HALL`)
     и `fillDungeon`, туман `exReveal`/`exLit`, ходьба `exGoTo`/`updateExplore`/`exStep` (угроза, засада `ambushNode`,
     монументы `useMonument`), отрисовка `renderExplore` (кэш `exTexture`), ввод `explorePointer`;
@@ -71,6 +75,10 @@
   `fightWith(ids, h, e)` — групповой бой, `startExplore`, `genDungeon`, `exGoTo`, `setAuto`, `setSpeed`,
   `fastForward(сек)` — прокрутить игровое время мгновенно; с автобоем бой считается за ~20 мс).
   Ускорение вручную: `index.html?speed=4`. Балансные прогоны — автобой + `fastForward`, а не ожидание в реальном времени.
+- Реликвия/улучшение: если эффект выражается полями `bonus/value`, `hpMax`, `seals` — только запись в data.js
+  (+ перевод в en.js и иконка). Иначе — хук в `RELICS` (relics.js), числа всё равно в data.js. Новое событие —
+  запись в `D.events` + тексты `ev.<id>.*` в обоих языках; новый вид действия — в `EVENT_FX`.
+  Иконки реликвий — SVG 64×64 в стиле инвентаря Diablo 2 с египетскими мотивами (золото, лазурит, сердолик, бирюза).
 - Групповой бой: прямо атакует только передняя; задние только помогают. Новая механика боя должна работать
   и для одной, и для нескольких противниц (одиночный бой — частный случай группы).
 - Отряд: бонус задаётся видом противницы; обычная — 1 бонус и 1 слот, элита/босс — до 3; одна спутница — один слот.
