@@ -11,7 +11,7 @@
   `explore` (режим исследования: размер, комнаты, содержимое, монументы, угроза).
   Правки баланса — только здесь.
 - `js/game.js` (~2400 строк, один IIFE). Разделы помечены комментариями `// ----`:
-  - экран и сохранение (`SAVE_KEY`, localStorage), звук (`sfx`, синтез Web Audio), ассеты;
+  - экран и сохранение (`SAVE_KEY`, localStorage), звук (`sfx`, синтез Web Audio), ассеты (`loadAssets`, `findPackStages`);
   - псевдо-3D фон: `THEMES`, `buildTheme`, `drawBackground` (темы `dungeon`, `spirit`, `jungle`);
   - противницы в бою: `fight.foes` (`makeFoe`), передняя `setFront` — на неё указывают `fight.enemy/ed/id/layout`;
     расстановка `foeLayout`/`layoutFoes` (цель) и `posRect` (где нарисована сейчас), задние — `updateBacks`
@@ -44,6 +44,7 @@
   реликвии) лежат в `data.js`, их английский перевод — в `en.js` → `content` (по id). Язык меняется перезагрузкой страницы.
 - `js/editor.js` — редактор противниц (обработка фона в браузере, IndexedDB, экспорт zip/json).
 - `packs/` — локальные спрайты пользователя, в git НЕ попадают. Никогда не добавлять их в коммиты.
+  Стадии ищутся сами: `packs/<id>/stageN.png` (`findPackStages` в `loadAssets`); `packs/pack.js` (`GAME_PACK`) главнее.
 
 ## Правила
 

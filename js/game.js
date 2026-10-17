@@ -147,8 +147,28 @@
     g.fillRect(0, 0, c.width, c.height);
     return c;
   }
+  function tryImage(src) { return loadImage(src).then(() => true, () => false); }
+  // Локальные стадии без настроек: packs/<id>/stage1.png, stage2.png… (папка вне git).
+  // Найденная картинка заменяет стадию из data.js, недостающие стадии берутся оттуда же.
+  // Если спрайты героини заданы в packs/pack.js, папку не ищем — pack.js главнее.
+  async function findPackStages(id, e) {
+    const packed = window.GAME_PACK && window.GAME_PACK.enemies && window.GAME_PACK.enemies[id];
+    if ((packed && packed.sprites) || !/^[\w-]+$/.test(id)) return;
+    const n = Math.max(e.sprites.length, (e.armor || 0) + 1);
+    const found = await Promise.all(Array.from({ length: n }, (_, k) => tryImage(`packs/${id}/stage${k + 1}.png`)));
+    if (!found.some(Boolean)) return;
+    const sprites = [];
+    for (let k = 0; k < n; k++) {
+      const src = found[k] ? `packs/${id}/stage${k + 1}.png` : e.sprites[k];
+      if (!src) break;
+      sprites.push(src);
+    }
+    e.sprites = sprites;
+    console.info(`packs/${id}: ${sprites.length} stages`, sprites);
+  }
   async function loadAssets() {
     const list = Object.entries(D.enemies);
+    await Promise.all(list.map(([id, e]) => findPackStages(id, e)));
     await Promise.all(list.map(async ([id, e]) => {
       const stages = [];
       for (const src of e.sprites) {
