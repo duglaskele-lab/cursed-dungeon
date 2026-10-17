@@ -517,14 +517,16 @@
   const backFoes = () => fight.foes.filter((f) => f.slot !== 'front' && f.slot !== 'gone' && !f.outcome);
 
   // Расстановка в глубину: передняя крупно по центру, задние меньше, выше по полу, по краям
-  // В группе передняя ближе к камере (крупный план, ноги уходят под нижнюю панель),
+  // Передняя ближе к камере (крупный план, ноги уходят под нижнюю панель) — и одна, и в группе;
   // задние — за ней ближе к центру, дальше по полу; фон приближается (BG_GROUP_ZOOM), чтобы зал был шире
   const BG_GROUP_ZOOM = 1.42;
   function foeLayout(foe) {
     const backs = backFoes();
     let x = 0.5, s = 1, bottom = HUD_BOTTOM + 6;
     if (foe.slot === 'front') {
-      if (backs.length) { s = 1.15; bottom += foe.base.h * s * 0.22; x = backs.length === 1 ? (backs[0].slot === 'left' ? 0.56 : 0.44) : 0.5; }
+      // передняя всегда крупным планом (cowboy shot): ноги уходят под нижнюю панель
+      s = 1.15; bottom += foe.base.h * s * 0.22;
+      if (backs.length === 1) x = backs[0].slot === 'left' ? 0.56 : 0.44;
     } else {
       x = foe.slot === 'left' ? 0.245 : 0.755; s = 0.52;
       bottom = foe.slot === 'left' ? 606 : 616;            // чуть вразнобой — живее
@@ -1852,10 +1854,10 @@
       ctx.textAlign = 'right';
       ctx.font = `700 ${30 + Math.min(14, h.combo)}px ${displayFont}`;
       ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(10,6,12,.85)';
-      ctx.strokeText(`${h.combo}`, W - 24, 200);
-      ctx.fillStyle = '#ffe2a8'; ctx.fillText(`${h.combo}`, W - 24, 200);
+      ctx.strokeText(`${h.combo}`, W - 24, 248);              // ниже кнопки автобоя
+      ctx.fillStyle = '#ffe2a8'; ctx.fillText(`${h.combo}`, W - 24, 248);
       ctx.font = `600 13px ${bodyFont}`; ctx.fillStyle = '#b9ae9c';
-      ctx.fillText(t('hud.combo'), W - 24, 218);
+      ctx.fillText(t('hud.combo'), W - 24, 266);
     }
   }
 
@@ -2724,10 +2726,14 @@
     const res = f.results, group = f.foes.length > 1;
     res.forEach((r) => { if (r.outcome === 'captured') run.captured.push(r.id); });
     if (node.type === 'boss') { runComplete(); return; }
+    const hpBefore = rh.hp;
+    heal(D.hero.postFightHeal || 0);                     // передышка после боя
+    const healed = Math.round(rh.hp - hpBefore);
     const xpMul = (o) => (o === 'captured' ? 0.8 : o === 'escaped' ? 0.5 : 1);
     const xp = Math.round(res.reduce((sum, r) => sum + r.ed.xp * xpMul(r.outcome), 0));
     const lv = grantXp(xp);
     const lines = [t('reward.xp', { n: xp })];
+    if (healed > 0) lines.push(t('reward.healed', { n: healed }));
     if (group) res.forEach((r) => lines.push(t('reward.groupLine', { name: r.ed.name, out: t('out.' + r.outcome) })));
     for (const r of res) {
       if (r.outcome !== 'captured') continue;

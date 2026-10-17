@@ -261,6 +261,7 @@
       'ck.seal': 'seal',
       'ck.heal': 'healing',
       'reward.xp': 'XP +{n}.',
+      'reward.healed': 'A breather: health +{n}.',
       'reward.caught': '{name} is captured and joins your collection for good.',
       'reward.lvl': 'Level up: {n}! Health and damage increased.',
       'reward.pick': 'Choose a reward:',
