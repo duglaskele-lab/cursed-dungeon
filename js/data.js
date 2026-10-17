@@ -78,6 +78,16 @@ window.GAME_DATA = {
       spheres: { every: [5.5, 7], count: [2, 3], grow: [3.4, 4.4], elements: ['fire', 'fire', 'ice'] },
       about: 'Неторопливая и спокойная: долгий замах, удобно парировать. Часто зажигает лисьи огни — огненные и ледяные сферы.'
     },
+    moth: {
+      name: 'Моль', subtitle: 'Ночная библиотекарша со свечой', kind: 'normal',
+      sprites: ['assets/moth/stage1.png'], armor: 2, chest: 0.66,
+      hp: 1150, stamina: 160, stamRegen: 2.5, xp: 55,
+      companion: { attack: { bonus: 'slash', value: 0.2 } },
+      portrait: { x: 0.487, y: 0.113 },
+      attack: { dmg: 9, telegraph: 1.0, follow: 0.75, interval: [2.0, 3.0], strikes: [1, 2] },
+      spheres: { every: [6, 8], count: [2, 3], grow: [3.4, 4.4], elements: ['fire', 'nature'] },
+      about: 'Тихая и сонная, бьёт крыльями средне и без спешки. Сферы — пламя её свечи и пыльца с крыльев: пыльца лечит её, если не убрать вовремя.'
+    },
     wolf: {
       name: 'Волчица', subtitle: 'Вожак стаи', kind: 'elite',
       sprites: ['assets/wolf/stage1.png'], armor: 2, chest: 0.7, rage: true,
@@ -154,9 +164,9 @@ window.GAME_DATA = {
     // зоны по порядку: сколько комнат пути занимают, кто там встречается и какого уровня (элита — на 1 выше);
     // group — шанс, что в обычном бою противниц две и три: в начале почти никогда, в конце этажа часто
     zones: [
-      { rooms: 3, pool: ['bunny', 'miko'], lvl: 1, group: [0.03, 0] },       // комнаты 2–4
-      { rooms: 4, pool: ['bunny', 'miko'], lvl: 2, group: [0.12, 0.03] },    // комнаты 5–8
-      { rooms: 3, pool: ['miko', 'bunny'], lvl: 3, group: [0.3, 0.2] }       // комнаты 9–11
+      { rooms: 3, pool: ['bunny', 'miko', 'moth'], lvl: 1, group: [0.03, 0] },      // комнаты 2–4
+      { rooms: 4, pool: ['bunny', 'miko', 'moth'], lvl: 2, group: [0.12, 0.03] },   // комнаты 5–8
+      { rooms: 3, pool: ['miko', 'bunny', 'moth'], lvl: 3, group: [0.3, 0.2] }      // комнаты 9–11
     ],
     boss: 'nekomata', bossLvl: 4,
     elite: 'wolf',

@@ -474,6 +474,10 @@
           name: 'Fox Priestess', subtitle: 'Keeper of the foxfire',
           about: 'Slow and calm: long wind-ups that are easy to parry. Often lights foxfire — fire and ice spheres.'
         },
+        moth: {
+          name: 'Moth Girl', subtitle: 'Night librarian with a candle',
+          about: 'Quiet and sleepy: her wing strikes are moderate and unhurried. Her spheres are candle flame and wing dust — the dust heals her unless you clear it in time.'
+        },
         wolf: {
           name: 'She-Wolf', subtitle: 'Leader of the pack',
           about: 'Mini-boss. Combos of up to three strikes. Every broken armor piece sends her into a rage: she attacks more often.'
