@@ -435,7 +435,7 @@
     const ed = foes[0].ed, kind = ed.kind || 'normal';
     const hero = makeHero(heroLvl, opts.runHero);
     fight = {
-      foes, front: null, results: [], next: null, threads: [], cam: null,
+      foes, front: null, results: [], next: null, threads: [], cam: null, bgZoom: foes.length > 1 ? BG_GROUP_ZOOM : 1,
       id: null, ed: null, enemy: null, layout: null,
       t: 0, over: false, outcome: null, resultShown: false, overT: 0, endT: 0,
       inRun: !!opts.runHero, theme: ed.theme || (kind === 'boss' ? 'spirit' : 'dungeon'),
@@ -473,14 +473,19 @@
   const backFoes = () => fight.foes.filter((f) => f.slot !== 'front' && f.slot !== 'gone' && !f.outcome);
 
   // Расстановка в глубину: передняя крупно по центру, задние меньше, выше по полу, по краям
+  // В группе передняя ближе к камере (крупный план, ноги уходят под нижнюю панель),
+  // задние — за ней ближе к центру, дальше по полу; фон приближается (BG_GROUP_ZOOM), чтобы зал был шире
+  const BG_GROUP_ZOOM = 1.42;
   function foeLayout(foe) {
     const backs = backFoes();
-    let x = 0.5, s = 1, lift = 0;
+    let x = 0.5, s = 1, bottom = HUD_BOTTOM + 6;
     if (foe.slot === 'front') {
-      if (backs.length === 1) { x = backs[0].slot === 'left' ? 0.6 : 0.4; s = 0.86; }
-      else if (backs.length > 1) s = 0.82;
-    } else { x = foe.slot === 'left' ? 0.19 : 0.81; s = 0.6; lift = 150; }
-    const dw = foe.base.w * s, dh = foe.base.h * s, bottom = HUD_BOTTOM + 6 - lift;
+      if (backs.length) { s = 1.15; bottom += foe.base.h * s * 0.22; x = backs.length === 1 ? (backs[0].slot === 'left' ? 0.56 : 0.44) : 0.5; }
+    } else {
+      x = foe.slot === 'left' ? 0.245 : 0.755; s = 0.52;
+      bottom = foe.slot === 'left' ? 606 : 616;            // чуть вразнобой — живее
+    }
+    const dw = foe.base.w * s, dh = foe.base.h * s;
     return { cx: W * x + foe.base.off * s, bottom, dw, dh, top: bottom - dh, chestY: bottom - dh * (foe.ed.chest || 0.62), s };
   }
   function layoutFoes(snap) {
@@ -874,7 +879,7 @@
     const since = fight.t - fight.guardT;
     const { pmin, pmax } = parryWindow(h);
     const presses = fight.guardPresses.filter((t0) => fight.t - t0 <= 0.6).length;   // спам по кругу не парирует
-    const holding = input.down && input.guardPress && !input.swiping && h.entangled <= 0;
+    const holding = (fight.autoGuard || (input.down && input.guardPress && !input.swiping)) && h.entangled <= 0;
     fight.guardPresses = [];
     const dmg = e.atk.dmg * e.dmgScale * levelMod(e.lvl, h.lvl) * rand(0.9, 1.1);
     const c = guardCenter();
@@ -1102,6 +1107,7 @@
       else dtE *= 0.25;          // замедление на время близкого кадра
     }
     updateHero(dt);
+    updateAuto();
     updateEnemy(dtE, dt);
     updateBacks(dtE, dt);
     updateNextFoe(dt);
@@ -1118,6 +1124,43 @@
     if (f.banner) { f.banner.t += dt; if (f.banner.t > f.banner.life) f.banner = null; }
 
     if (f.over && !f.resultShown && f.overT > 1.4) { f.resultShown = true; showResult(); }
+  }
+
+  // ---------------------------------------------------------------- автобой
+  // Компьютер атакует (быстрые и заряженные тапы, росчерки) и блокирует удары: держит палец в круге
+  // заранее, поэтому выходит блок, а не парирование. Не захватывает и специально не соединяет сферы.
+  // Включается и выключается кнопкой «Авто» в любой момент (G.auto сохраняется между боями).
+  function autoPlan(e) {
+    const r = Math.random();
+    if (tired(e) && !isLastStage(e)) return r < 0.6 ? { kind: 'tap', charge: rand(1.75, 2.05) } : { kind: 'slash', charge: rand(1.3, 2) };
+    // серия быстрых тапов, заряженный удар или росчерк
+    return r < 0.5 ? { kind: 'tap', charge: rand(0.1, 0.3), burst: randi(2, 4) } : r < 0.85 ? { kind: 'tap', charge: rand(1.6, 2.05) } : { kind: 'slash', charge: rand(0.9, 2) };
+  }
+  function updateAuto() {
+    const f = fight, h = f.hero, e = f.enemy;
+    f.autoGuard = false;
+    if (!G.auto || f.over || f.next || !enemyActive(e)) return;
+    if (e.state === 'telegraph' && e.telDur - e.st < parryWindow(h).pmax + 0.25) { f.autoGuard = true; return; }
+    if (!f.autoPlan) f.autoPlan = autoPlan(e);
+    const plan = f.autoPlan;
+    if (h.exhausted || h.stam < D.hero.slashCost * 1.6 || h.chargeT < plan.charge) return;
+    const L = f.layout;
+    if (plan.kind === 'slash' && e.state !== 'telegraph') {
+      const y0 = L.chestY + rand(-20, 40), x0 = L.cx - L.dw * 0.32, x1 = L.cx + L.dw * 0.32;
+      resolveSwipe(Array.from({ length: 12 }, (_, i) => ({ x: lerp(x0, x1, i / 11), y: y0 + i * 4 })));
+    } else {
+      // тап: в слабую точку, иначе по телу мимо сфер
+      let p = f.weak ? { x: f.weak.x, y: f.weak.y } : null;
+      for (let k = 0; k < 8 && !p; k++) {
+        const c = { x: L.cx + rand(-0.13, 0.13) * L.dw, y: L.chestY + rand(-30, 90) };
+        if (f.spheres.every((s) => dist(c.x, c.y, s.x, s.y) > s.r + 18)) p = c;
+      }
+      if (!p) return;
+      f.fx.shields.push({ x: p.x, y: p.y, r: 14, t: 0, life: 0.25, color: '#ffe9a8' });
+      heroTap(p.x, p.y);
+      if (plan.burst > 1) { plan.burst--; plan.charge = rand(0.1, 0.22); return; }
+    }
+    f.autoPlan = autoPlan(e);
   }
 
   // после ухода передней — пауза, затем вперёд выходит случайная из оставшихся
@@ -1274,11 +1317,19 @@
       ctx.scale(z, z);
       ctx.translate(-c.x, -c.y);
     }
-    drawBackground(f.theme, G.time);
+    // в групповом бою фон приближен: коридор шире, задним противницам есть где стоять
+    f.bgZoom = lerp(f.bgZoom || 1, backFoes().length ? BG_GROUP_ZOOM : 1, 0.06);
+    const bgz = (draw) => {
+      ctx.save();
+      ctx.translate(W / 2, 390); ctx.scale(f.bgZoom, f.bgZoom); ctx.translate(-W / 2, -390);
+      draw();
+      ctx.restore();
+    };
+    bgz(() => drawBackground(f.theme, G.time));
     drawFoes();
     drawWeak();
     drawTelegraph();
-    drawForeground(f.theme);
+    bgz(() => drawForeground(f.theme));
     ctx.restore();
     if (k > 0) drawCloseupVignette(k);
     drawVines();
@@ -1444,7 +1495,7 @@
     const c = guardCenter();
     const r = lerp(GUARD_R + 140, GUARD_R, p);
     const inParry = left <= pmax && left >= pmin;
-    const holding = input.down && input.guardPress && !input.swiping;
+    const holding = fight.autoGuard || (input.down && input.guardPress && !input.swiping);
     ctx.save();
     ctx.fillStyle = holding ? 'rgba(255,226,138,.24)' : inParry ? 'rgba(159,255,201,.16)' : 'rgba(255,255,255,.07)';
     ctx.beginPath(); ctx.arc(c.x, c.y, GUARD_R, 0, Math.PI * 2); ctx.fill();
@@ -1884,6 +1935,7 @@
   function contextTip() {
     const f = fight, e = f.enemy;
     if (f.over) return '';
+    if (G.auto) return t('ctx.auto');
     if (e.state === 'telegraph') return t('ctx.tel');
     if (f.vines.length) return f.hazard.short;
     if (isLastStage(e)) return f.hero.seals > 0 ? t('ctx.capture') : t('ctx.captureNoSeals');
@@ -3179,7 +3231,7 @@
     if (G.paused) return false;
     if (G.mode === 'map') { mapPointer(p); return false; }
     if (G.mode === 'explore') { if (run) explorePointer(p); return false; }
-    if (G.mode !== 'fight' || !fight || input.down) return false;
+    if (G.mode !== 'fight' || !fight || input.down || G.auto) return false;      // при автобое касания не мешают компьютеру
     input.down = true; input.id = id;
     input.x = input.sx = p.x; input.y = input.sy = p.y;
     input.downT = fight.t; input.downReal = performance.now();
@@ -3222,7 +3274,7 @@
 
   // ---------------------------------------------------------------- интерфейс
   const ui = {
-    loading: $('#loading'), menu: $('#menu'), result: $('#result'), pause: $('#pause'), pauseBtn: $('#pauseBtn'), panel: $('#panel')
+    loading: $('#loading'), menu: $('#menu'), result: $('#result'), pause: $('#pause'), pauseBtn: $('#pauseBtn'), panel: $('#panel'), autoBtn: $('#autoBtn')
   };
   function show(el) { el.classList.remove('hidden'); }
   function hide(el) { el.classList.add('hidden'); }
@@ -3333,6 +3385,12 @@
     G.paused = false; hide(ui.pause); run = null; toMenu();
     if (G.returnTo === 'editor' && window.CDEditor) { G.returnTo = null; window.CDEditor.open(); }
   });
+  ui.autoBtn.addEventListener('click', () => {
+    sfx.ensure();
+    G.auto = !G.auto;
+    if (fight) { fight.autoGuard = false; fight.autoPlan = null; }
+    resetInput();
+  });
   $('#resumeBtn').addEventListener('click', () => { G.paused = false; hide(ui.pause); });
   ui.pauseBtn.addEventListener('click', () => { if ((G.mode === 'fight' && !fight.over) || G.mode === 'map' || G.mode === 'explore') { G.paused = true; resetInput(); buildMenu(); show(ui.pause); } });
   $('#soundBtn').addEventListener('click', () => { sfx.toggle(); buildMenu(); });
@@ -3415,9 +3473,17 @@
     else { drawBackground('dungeon', G.time); drawForeground('dungeon'); }
   }
   let last = performance.now();
+  // кнопка автобоя видна только в идущем бою
+  let autoShown = null;
+  function syncAutoBtn() {
+    const vis = G.mode === 'fight' && fight && !fight.over && !G.paused && !G.panelOpen;
+    if (vis !== autoShown) { autoShown = vis; ui.autoBtn.classList.toggle('hidden', !vis); }
+    ui.autoBtn.classList.toggle('on', !!G.auto);
+  }
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
+    syncAutoBtn();
     if (!G.paused) update(dt);
     render();
     requestAnimationFrame(frame);
@@ -3503,6 +3569,7 @@
     },
     captureChance: () => (fight ? captureChance(fight.enemy) : 0),
     guardCenter: () => guardCenter(),
+    setAuto: (v) => { G.auto = !!v; },
     next: afterRunFight
   };
   boot();

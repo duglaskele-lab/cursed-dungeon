@@ -213,6 +213,13 @@
     border: 1px solid var(--line); background: rgba(16,12,20,.7); color: var(--gold);
     font-size: calc(var(--u)*15); font-weight: 700; cursor: pointer; z-index: 5;
   }
+  #autoBtn {
+    position: absolute; top: calc(var(--u)*166); right: calc(var(--u)*10);
+    min-width: calc(var(--u)*48); height: calc(var(--u)*32); padding: 0 calc(var(--u)*8); border-radius: calc(var(--u)*16);
+    border: 1px solid var(--line); background: rgba(16,12,20,.7); color: var(--gold);
+    font-size: calc(var(--u)*12); font-weight: 700; letter-spacing: .06em; cursor: pointer; z-index: 5;
+  }
+  #autoBtn.on { background: linear-gradient(180deg, #f3d89c, #c9984f); color: #1a1208; box-shadow: 0 0 calc(var(--u)*14) rgba(233,194,122,.5); }
   #pause { justify-content: center; }
   #loading { justify-content: center; font-family: var(--display); font-size: calc(var(--u)*22); color: var(--gold); }
   #loading .err { font-family: var(--body); font-size: calc(var(--u)*14); color: var(--red); margin-top: calc(var(--u)*12); text-align: center; max-width: calc(var(--u)*420); }
@@ -306,6 +313,7 @@
   </div>
 
   <button id="pauseBtn" class="hidden" aria-label="Пауза" data-i18n-aria="pause.title">II</button>
+  <button id="autoBtn" class="hidden" data-i18n="auto.btn" data-i18n-aria="auto.aria">АВТО</button>
 </div>
 
 <script src="js/data.js"></script>

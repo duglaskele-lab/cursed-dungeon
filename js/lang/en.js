@@ -213,6 +213,9 @@
       'ctx.tired': 'Worn out! A charged strike (×1.8+) or a slash breaks armor',
       'ctx.spheres': 'Swipe through two spheres to drain her stamina',
       'ctx.default': 'Tap — strike · Pause — charge · Strike circle — guard · Swipe — slash',
+      'auto.btn': 'AUTO',
+      'auto.aria': 'Auto battle',
+      'ctx.auto': 'Auto battle: attacks and blocks on its own, no captures. Tap AUTO to take control',
 
       // ---------------------------------------------------------------- run
       'room.start': 'Cell',
