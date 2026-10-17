@@ -55,27 +55,31 @@ function withSquad(mods) {
 // недоступно (file:// в Chrome), берётся середина верха. Поправить вручную: portrait: { x, y, size }
 // у героини в data.js — доли ширины и высоты спрайта.
 const portraitCache = {};
+// Где на спрайте голова (доли ширины и высоты): верх силуэта и середина его верхней части.
+// null — если пиксели недоступны (Chrome не даёт читать их у картинок с file://)
+function headSpot(img, w, h) {
+  try {
+    const S = 4, mw = Math.ceil(w / S), mh = Math.ceil(h / S);
+    const c = document.createElement('canvas'); c.width = mw; c.height = mh;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0, mw, mh);
+    const d = g.getImageData(0, 0, mw, mh).data, solid = (px, py) => d[(py * mw + px) * 4 + 3] > 100;
+    let top = -1;
+    for (let py = 0; py < mh && top < 0; py++) for (let px = 0; px < mw; px++) if (solid(px, py)) { top = py; break; }
+    if (top < 0) return null;
+    let sx = 0, n = 0;
+    for (let py = top + Math.round(mh * 0.04); py < Math.min(mh, top + Math.round(mh * 0.15)); py++) for (let px = 0; px < mw; px++) if (solid(px, py)) { sx += px; n++; }
+    return { x: n ? sx / n / mw : 0.5, y: top / mh + 0.1 };
+  } catch (e) { return null; }
+}
+
 function portraitSpot(id) {
   if (portraitCache[id]) return portraitCache[id];
   const st = assets[id] && assets[id].stages[0], ed = D.enemies[id];
   if (!st) return null;
-  let x = 0.5, y = 0.12, size = 0.21;
-  try {
-    const S = 4, mw = Math.ceil(st.w / S), mh = Math.ceil(st.h / S);
-    const c = document.createElement('canvas'); c.width = mw; c.height = mh;
-    const g = c.getContext('2d', { willReadFrequently: true });
-    g.drawImage(st.img, 0, 0, mw, mh);
-    const d = g.getImageData(0, 0, mw, mh).data, solid = (px, py) => d[(py * mw + px) * 4 + 3] > 100;
-    let top = -1;
-    for (let py = 0; py < mh && top < 0; py++) for (let px = 0; px < mw; px++) if (solid(px, py)) { top = py; break; }
-    if (top >= 0) {
-      let sx = 0, n = 0;
-      for (let py = top + Math.round(mh * 0.04); py < Math.min(mh, top + Math.round(mh * 0.15)); py++) for (let px = 0; px < mw; px++) if (solid(px, py)) { sx += px; n++; }
-      if (n) x = sx / n / mw;
-      y = top / mh + 0.1;
-    }
-  } catch (e) { /* пиксели недоступны — остаётся середина верха */ }
   const o = ed.portrait || {};
+  const { x, y } = (o.x != null && o.y != null) ? o : headSpot(st.img, st.w, st.h) || { x: 0.5, y: 0.12 };
+  const size = 0.21;
   portraitCache[id] = { x: o.x != null ? o.x : x, y: o.y != null ? o.y : y, size: o.size || size };
   return portraitCache[id];
 }

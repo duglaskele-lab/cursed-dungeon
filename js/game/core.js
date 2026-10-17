@@ -143,7 +143,7 @@ function loadImage(src) {
 }
 function tinted(img, color) {
   const c = document.createElement('canvas');
-  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height;
   const g = c.getContext('2d');
   g.drawImage(img, 0, 0);
   g.globalCompositeOperation = 'source-in';
@@ -174,12 +174,42 @@ async function loadAssets() {
   const list = Object.entries(D.enemies);
   await Promise.all(list.map(([id, e]) => findPackStages(id, e)));
   await Promise.all(D.relics.map((r) => loadImage(relicIcon(r.id)).then((img) => { relicImgs[r.id] = img; }, () => {})));
-  await Promise.all(list.map(async ([id, e]) => {
-    const stages = [];
-    for (const src of e.sprites) {
-      const img = await loadImage(src);
-      stages.push({ img, white: tinted(img, '#ffffff'), red: tinted(img, '#ff2a2a'), dark: tinted(img, '#0a0610'), w: img.naturalWidth, h: img.naturalHeight });
-    }
-    assets[id] = { stages };
-  }));
+  await Promise.all(list.map(async ([id, e]) => { assets[id] = await loadStages(id, e.sprites); }));
+}
+
+// ---------------------------------------------------------------- обработка спрайтов при загрузке
+// Работает и с file:// (пиксели не читаются, только перерисовка):
+// - больше SPRITE_MAX по большей стороне — уменьшается (память: у каждой стадии ещё 3 цветные копии);
+// - стадия другого размера, чем первая (свой пакет, другое разрешение), вписывается в холст первой стадии
+//   по низу и центру — там, где стоят ноги, чтобы фигура не прыгала при поломке брони.
+// Пустые поля вокруг фигуры обрезает редактор противниц при подготовке листа (там пиксели доступны).
+const SPRITE_MAX = 2048;
+function fitStage(img, w, h) {
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  const s = Math.min(w / iw, h / ih), dw = Math.round(iw * s), dh = Math.round(ih * s);
+  g.drawImage(img, Math.round((w - dw) / 2), h - dh, dw, dh);
+  return c;
+}
+function prepareStages(id, imgs) {
+  const W0 = imgs[0].naturalWidth, H0 = imgs[0].naturalHeight;
+  const k = Math.min(1, SPRITE_MAX / Math.max(W0, H0));
+  const w = Math.round(W0 * k), h = Math.round(H0 * k);
+  const notes = [];
+  const out = imgs.map((img, i) => {
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    if (iw === w && ih === h) return img;
+    notes.push(`stage ${i + 1}: ${iw}×${ih} → ${w}×${h}` + (Math.abs(iw / ih - W0 / H0) > 0.01 ? ' (other aspect ratio: fitted to the bottom centre)' : ''));
+    return fitStage(img, w, h);
+  });
+  if (notes.length) console.info(`sprites ${id}:`, notes.join('; '));
+  return out;
+}
+async function loadStages(id, sprites) {
+  const imgs = await Promise.all(sprites.map(loadImage));
+  return { stages: prepareStages(id, imgs).map((img) => ({
+    img, white: tinted(img, '#ffffff'), red: tinted(img, '#ff2a2a'), dark: tinted(img, '#0a0610'), w: img.naturalWidth || img.width, h: img.naturalHeight || img.height
+  })) };
 }

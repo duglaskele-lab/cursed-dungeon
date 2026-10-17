@@ -42,3 +42,46 @@ def test_editor_opens(game):
     game.page.click('#editorBtn')
     game.page.wait_for_selector('#editor:not(.hidden)')
     assert game.js('!!window.CDEditor')
+
+
+def png(w, h, rgba=(200, 120, 80, 255)):
+    """Однотонный PNG w×h без сторонних библиотек."""
+    import struct
+    import zlib
+    row = b'\x00' + bytes(rgba) * w
+    raw = zlib.compress(row * h, 9)
+    chunk = lambda t, d: struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)) + chunk(b'IDAT', raw) + chunk(b'IEND', b'')
+
+
+def test_stages_fitted_to_first(browser):
+    """Стадии другого разрешения и пропорций подгоняются под холст первой стадии."""
+    g = open_with_packs(browser, {'moth/stage2.png': png(665 * 2, 896 * 2), 'moth/stage3.png': png(500, 896)})
+    try:
+        sizes = g.js("__proto.stageSizes('moth')")
+        assert sizes == [[665, 896]] * 3
+        assert not g.errors
+    finally:
+        g.page.close()
+
+
+def test_huge_sprite_downscaled(browser):
+    g = open_with_packs(browser, {'bunny/stage1.png': png(1500, 4400), 'bunny/stage2.png': png(1500, 4400)})
+    try:
+        sizes = g.js("__proto.stageSizes('bunny')")
+        assert max(sizes[0]) == 2048 and sizes[0] == sizes[1]
+        g.js("__proto.fightWith(['bunny'], 1, 1)")
+        g.js('__proto.fastForward(2)')
+        assert not g.errors
+    finally:
+        g.page.close()
+
+
+def test_editor_finds_head_for_portrait(game):
+    import base64
+    src = 'data:image/png;base64,' + base64.b64encode(STAGE1).decode()
+    game.page.click('#editorBtn')
+    game.page.wait_for_selector('#editor:not(.hidden)')
+    game.js('(src) => window.CDEditor._onSheetImage(src)', src)
+    p = game.js('window.CDEditor._state.portrait')
+    assert p and abs(p['x'] - 0.487) < 0.05 and abs(p['y'] - 0.113) < 0.05, p

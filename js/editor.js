@@ -343,7 +343,7 @@
 
   // ================================================================ интерфейс
   const root = $('#editor');
-  const state = { editingId: null, images: [], source: null, tempId: null, dirty: false, list: [] };
+  const state = { editingId: null, images: [], portrait: null, source: null, tempId: null, dirty: false, list: [] };
 
   root.innerHTML = `
     <h1>${t('menu.editor')}</h1>
@@ -506,6 +506,7 @@
     d.chest = clamp(d.chest || 0.62, 0.4, 0.85);
     if (!d.spheres.elements.length) { d.spheres.elements = ['fire']; d.spheres.count = [0, 0]; }
     d.sprites = state.images.slice();
+    if (state.portrait) d.portrait = state.portrait;
     if (d.kind === 'boss') {
       d.phases = makePhases(d, d.armor + 1);
       d.intro = d.intro || t('ed.defIntro', { name: d.name });
@@ -544,6 +545,9 @@
       }
       const { canvases, notes } = composeStages(figs, 1400);
       state.images = canvases.map((c) => c.toDataURL('image/png'));
+      // голова для портрета отряда: здесь пиксели доступны, а в игре с file:// — нет, поэтому сохраняем в данные
+      const hs = CD.headSpot(canvases[0], canvases[0].width, canvases[0].height);
+      state.portrait = hs && { x: Math.round(hs.x * 1000) / 1000, y: Math.round(hs.y * 1000) / 1000 };
       state.dirty = true;
       renderThumbs();
       const c0 = canvases[0];
@@ -593,7 +597,7 @@
   }
 
   function newEnemy() {
-    state.editingId = null; state.images = []; state.source = null; state.dirty = false;
+    state.editingId = null; state.images = []; state.portrait = null; state.source = null; state.dirty = false;
     const d = templateData(Object.keys(D.enemies).find((k) => CD.isBuiltin(k) && D.enemies[k].kind === 'normal') || Object.keys(D.enemies)[0]);
     d.name = t('ed.newName'); d.id = ''; d.subtitle = t('ed.defSub'); d.about = t('ed.defAbout'); d.kind = 'normal';
     d.floor = { zones: [0, 1], elite: false, boss: false };
@@ -607,7 +611,7 @@
   }
 
   function editRecord(r) {
-    state.editingId = r.id; state.images = r.data.sprites.slice(); state.source = null; state.dirty = false;
+    state.editingId = r.id; state.images = r.data.sprites.slice(); state.portrait = r.data.portrait || null; state.source = null; state.dirty = false;
     dataToForm({ ...r.data, id: r.id });
     renderThumbs();
     setStatus('#edStatus', t('ed.replaceHint'));

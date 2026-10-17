@@ -80,12 +80,7 @@ function applyFloor(id, fl = {}) {
   if (fl.boss) D.floor.boss.push(id);
 }
 async function registerEnemy(id, data) {
-  const stages = [];
-  for (const src of data.sprites) {
-    const img = await loadImage(src);
-    stages.push({ img, white: tinted(img, '#ffffff'), red: tinted(img, '#ff2a2a'), dark: tinted(img, '#0a0610'), w: img.naturalWidth, h: img.naturalHeight });
-  }
-  assets[id] = { stages };
+  assets[id] = await loadStages(id, data.sprites);
   D.enemies[id] = data;
   applyFloor(id, data.floor);
 }
@@ -97,7 +92,7 @@ function unregisterEnemy(id) {
 }
 window.CD = {
   D, G, sfx, ui, show, hide, isBuiltin: (id) => BUILTIN.has(id),
-  registerEnemy, unregisterEnemy, applyFloor, floorZones,
+  registerEnemy, unregisterEnemy, applyFloor, floorZones, headSpot,
   hideAll: hideAllOverlays, toMenu, buildMenu,
   startTraining: (id, h, e) => { G.selected = id; G.heroLvl = h; G.enemyLvl = e; G.count = 1; startTraining(); }
 };
@@ -116,7 +111,7 @@ window.__proto = {
     for (let i = 1; i <= n; i++) { const a = i / n * turns * Math.PI * 2; onMove({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }, 99); }
     onRelease(99);
   },
-  bonusKinds: Object.keys(BONUS),
+  bonusKinds: Object.keys(BONUS), stageSizes: (id) => assets[id].stages.map((s) => [s.w, s.h]),
   relicHooks: Object.keys(RELICS), eventFx: Object.keys(EVENT_FX), addRelic, applyUpgrade, eventOutcome,
   enemyImpact: () => enemyImpact(fight.enemy),
   captureChance: () => (fight ? captureChance(fight.enemy) : 0),

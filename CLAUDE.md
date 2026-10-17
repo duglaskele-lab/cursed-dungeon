@@ -14,11 +14,13 @@
   (`const`/`let`/`function`) общие для всех файлов. Порядок подключения в `index.html` важен: код, который выполняется
   при загрузке (не внутри функций), может звать только то, что объявлено в этом же файле или раньше.
   - `core.js` — константы `W/H`, `D`, `t`, помощники (`rand`, `clamp`, `pick`…), экран, сохранение (`SAVE_KEY`,
-    localStorage), звук (`sfx`, синтез Web Audio), загрузка спрайтов (`loadAssets`, `findPackStages`);
+    localStorage), звук (`sfx`, синтез Web Audio), загрузка спрайтов (`loadAssets`, `findPackStages`) и их обработка
+    `loadStages`/`prepareStages` (больше `SPRITE_MAX` — уменьшить, стадии другого размера — вписать в холст первой);
   - `background.js` — псевдо-3D фон: `THEMES`, `buildTheme`, `drawBackground` (темы `dungeon`, `spirit`, `jungle`);
   - `state.js` — состояние `G`, `fight`, `run`, `input`; стадии брони `spriteIndex`/`spriteFor`; отряд: `BONUS`
     (виды бонусов → модификаторы героя), `withSquad` (накладывает бонусы на `mods` в `makeHero`), `squadMember`/`setSquad`;
-    портреты `portraitSpot`/`portraitRect`/`portraitStyle` (голова по `portrait` в data.js или по силуэту);
+    портреты `portraitSpot`/`portraitRect`/`portraitStyle` (голова по `portrait` в data.js или по силуэту `headSpot`;
+    с file:// пиксели не читаются, поэтому редактор сохраняет `portrait` в данные сам);
   - `relics.js` — реликвии и улучшения: простые эффекты `grantPerk` (поля `bonus/value`, `hpMax`, `seals` в data.js),
     особые — хуки `RELICS[id]`, вызываются из боя через `relicEvent(h, имя, ctx)` / `relicMod(h, имя, значение, ctx)`;
     иконки `relicIcon` (`assets/relics/<id>.svg`), на холсте — `relicImgs` + `drawRelicIcons` (fight-render.js);
