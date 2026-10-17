@@ -323,7 +323,22 @@
 <script src="js/i18n.js"></script>
 <!-- локальный пакет спрайтов: packs/pack.js не хранится в git (см. packs/README.md) -->
 <script src="packs/pack.js" onerror="this.remove()"></script>
-<script src="js/game.js"></script>
+<!-- игра: файлы js/game/*.js, порядок важен (core первым, main последним) -->
+<script src="js/game/core.js"></script>
+<script src="js/game/background.js"></script>
+<script src="js/game/state.js"></script>
+<script src="js/game/foes.js"></script>
+<script src="js/game/fight.js"></script>
+<script src="js/game/auto.js"></script>
+<script src="js/game/fight-render.js"></script>
+<script src="js/game/floor.js"></script>
+<script src="js/game/squad-ui.js"></script>
+<script src="js/game/map.js"></script>
+<script src="js/game/run.js"></script>
+<script src="js/game/explore.js"></script>
+<script src="js/game/input.js"></script>
+<script src="js/game/ui.js"></script>
+<script src="js/game/main.js"></script>
 <script src="js/editor.js"></script>
 </body>
 </html>

@@ -10,36 +10,41 @@
   `squad` (слоты отряда) и `companion` у героинь (бонус по слотам), `group` (сила противниц в группе),
   `explore` (режим исследования: размер, комнаты, содержимое, монументы, угроза).
   Правки баланса — только здесь.
-- `js/game.js` (~2400 строк, один IIFE). Разделы помечены комментариями `// ----`:
-  - экран и сохранение (`SAVE_KEY`, localStorage), звук (`sfx`, синтез Web Audio), ассеты (`loadAssets`, `findPackStages`);
-  - псевдо-3D фон: `THEMES`, `buildTheme`, `drawBackground` (темы `dungeon`, `spirit`, `jungle`);
-  - противницы в бою: `fight.foes` (`makeFoe`), передняя `setFront` — на неё указывают `fight.enemy/ed/id/layout`;
-    расстановка `foeLayout`/`layoutFoes` (цель) и `posRect` (где нарисована сейчас), задние — `updateBacks`
-    (сферы, нить лечения `fight.threads`, выход вперёд `stepForward`), росчерк по задним `slashBack`;
-    выбыла передняя — `foeDone` (следующая случайная, `updateNextFoe`), задняя — `backDone`; итоги — `fight.results`;
-    близкий кадр при поломке брони — `fight.cam`, `camZoom`;
-  - бой: `newFight`, `heroTap`, `heroSlash`, `guardPress`/`enemyImpact` (защита нажатием в круг удара),
+- `js/game/*.js` — код игры (~3700 строк), обычные `<script>` без модулей и без IIFE: объявления верхнего уровня
+  (`const`/`let`/`function`) общие для всех файлов. Порядок подключения в `index.html` важен: код, который выполняется
+  при загрузке (не внутри функций), может звать только то, что объявлено в этом же файле или раньше.
+  - `core.js` — константы `W/H`, `D`, `t`, помощники (`rand`, `clamp`, `pick`…), экран, сохранение (`SAVE_KEY`,
+    localStorage), звук (`sfx`, синтез Web Audio), загрузка спрайтов (`loadAssets`, `findPackStages`);
+  - `background.js` — псевдо-3D фон: `THEMES`, `buildTheme`, `drawBackground` (темы `dungeon`, `spirit`, `jungle`);
+  - `state.js` — состояние `G`, `fight`, `run`, `input`; стадии брони `spriteIndex`/`spriteFor`; отряд: `BONUS`
+    (виды бонусов → модификаторы героя), `withSquad` (накладывает бонусы на `mods` в `makeHero`), `squadMember`/`setSquad`;
+    портреты `portraitSpot`/`portraitRect`/`portraitStyle` (голова по `portrait` в data.js или по силуэту);
+  - `foes.js` — противницы в бою: `fight.foes` (`makeFoe`), передняя `setFront` — на неё указывают `fight.enemy/ed/id/layout`;
+    расстановка `foeLayout`/`layoutFoes` (цель) и `posRect` (где нарисована сейчас); эффекты (частицы, всплывающий текст);
+  - `fight.js` — бой: `newFight`, `heroTap`, `heroSlash`, `guardPress`/`enemyImpact` (защита нажатием в круг удара),
     `tryBreak`/`breakArmor`, захват кругом `circleGesture`/`tryCapture`/`capture`, сферы `spawnSpheres`/`sphereBurst`/`resolveSwipe`,
-    помехи босса `HAZARDS` + `spawnVine`/`updateVines`/`drawVines`/`drawWisps`;
-  - отряд: `BONUS` (виды бонусов → модификаторы героя), `withSquad` (накладывает бонусы на `mods` в `makeHero`),
-    `squadMember`/`setSquad` (сохраняется в `save.squad`), выбор — `pickCompanion`/`showSquadPanel`;
-    портреты — `portraitSpot`/`portraitRect`/`portraitStyle` (голова по `portrait` в data.js или по силуэту),
-    слоты в бою `squadSlotRect`, подсказка `drawSquadTip` (наведение `G.hover` или касание `G.slotTip`);
-  - автобой: `updateAuto`/`autoPlan` (атакует, блокирует через `fight.autoGuard`, не парирует и не захватывает),
+    помехи босса `HAZARDS` + `spawnVine`/`updateVines`; задние — `updateBacks` (сферы, нить лечения `fight.threads`,
+    выход вперёд `stepForward`), росчерк по задним `slashBack`; выбыла передняя — `foeDone` (следующая случайная,
+    `updateNextFoe`), задняя — `backDone`; итоги — `fight.results`; близкий кадр при поломке брони — `fight.cam`, `camZoom`;
+  - `auto.js` — автобой: `updateAuto`/`autoPlan` (атакует, блокирует через `fight.autoGuard`, не парирует и не захватывает),
     флаг `G.auto`, кнопка `#autoBtn`;
-  - отрисовка боя: `renderFight`, `drawTopHud`, `drawBottomHud`;
-  - этаж: `genFloor` = `layoutFloor` (пояса комнат в координатах u вдоль пути / v поперёк, 0…`MAP_V`)
+  - `fight-render.js` — отрисовка боя: `renderFight`, `drawTopHud`, `drawBottomHud`, `drawVines`/`drawWisps`;
+    слоты отряда в бою `squadSlotRect`, подсказка `drawSquadTip` (наведение `G.hover` или касание `G.slotTip`);
+  - `floor.js` — этаж: `genFloor` = `layoutFloor` (пояса комнат в координатах u вдоль пути / v поперёк, 0…`MAP_V`)
     + `linkBands` (двери только между соседними поясами, где стены перекрываются ≥ `DOOR_MIN`) + `assignRooms`
-    (типы комнат по правилам `D.floor`); план подземелья `drawFloorMap` (мини и большой, туман `knownRooms`,
-    статичная часть кэшируется в `mapTexture`), выбор комнаты `chooseDoor`/`chooseNode`/`mapPointer`;
-  - забег: `renderMap`/`drawDoor`, `enterNode`, `afterRunFight`, `EVENTS`, `showRest`; экран забега — `runScreen()`
-    (`map` для графа, `explore` для исследования);
-  - режим исследования: `startExplore`, генерация `tryDungeon`/`genDungeon` (клетки `T_WALL/T_ROOM/T_HALL`) и
-    `fillDungeon`, туман `exReveal`/`exLit`, ходьба `exGoTo`/`updateExplore`/`exStep` (угроза, засада `ambushNode`,
+    (типы комнат по правилам `D.floor`);
+  - `squad-ui.js` — выбор спутниц `pickCompanion`/`showSquadPanel`;
+  - `map.js` — экран комнаты `updateMap`/`renderMap`/`drawDoor`; план подземелья `drawFloorMap` (мини и большой,
+    туман `knownRooms`, статичная часть кэшируется в `mapTexture`), выбор комнаты `chooseDoor`/`chooseNode`/`mapPointer`;
+  - `run.js` — забег: `enterNode`, `afterRunFight`, `EVENTS`, `showRest`, `runComplete`/`runOver`;
+  - `explore.js` — режим исследования: `startExplore`, генерация `tryDungeon`/`genDungeon` (клетки `T_WALL/T_ROOM/T_HALL`)
+    и `fillDungeon`, туман `exReveal`/`exLit`, ходьба `exGoTo`/`updateExplore`/`exStep` (угроза, засада `ambushNode`,
     монументы `useMonument`), отрисовка `renderExplore` (кэш `exTexture`), ввод `explorePointer`;
-  - ввод: `onPress`/`onMove`/`onRelease` (Pointer Events);
-  - API для редактора: `window.CD`; хук автотестов: `window.__proto`.
-- `js/i18n.js` + `js/lang/ru.js`, `js/lang/en.js` — локализация. `t('ключ', {подстановки})` в game.js и editor.js;
+    экран забега — `runScreen()` (`map` для графа, `explore` для исследования);
+  - `input.js` — ввод: `onPress`/`onMove`/`onRelease` (Pointer Events);
+  - `ui.js` — меню (`buildMenu`, `toMenu`, `startTraining`), панели (`showPanel`), итоги боя, кнопки;
+  - `main.js` — цикл `update`/`render`/`frame`, API для редактора `window.CD`, хук автотестов `window.__proto`, `boot()`.
+- `js/i18n.js` + `js/lang/ru.js`, `js/lang/en.js` — локализация. `t('ключ', {подстановки})` в js/game/*.js и editor.js;
   статичный HTML — атрибуты `data-i18n`, `data-i18n-html`, `data-i18n-aria`. Русские тексты контента (имена, описания,
   реликвии) лежат в `data.js`, их английский перевод — в `en.js` → `content` (по id). Язык меняется перезагрузкой страницы.
 - `js/editor.js` — редактор противниц (обработка фона в браузере, IndexedDB, экспорт zip/json).

@@ -166,7 +166,8 @@ python -m pytest
 ```
 index.html                  страница и интерфейс (меню, итоги, панели, редактор)
 js/data.js                  баланс: герой, противницы, стихии, реликвии, улучшения, план этажа
-js/game.js                  движок, бой, уровень
+js/game/*.js                движок по файлам: core, бой (fight, foes, auto, fight-render), этаж (floor, map, run),
+                            исследование (explore), отряд, ввод, интерфейс, main — порядок подключения в index.html
 js/editor.js                редактор противниц
 assets/<id>/stageN.png      спрайты
 tools/prepare_sprites.py    подготовка спрайтов из листа (Python, необязательно)
