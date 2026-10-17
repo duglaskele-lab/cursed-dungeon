@@ -5,7 +5,8 @@
 
 ## Где что лежит
 
-- `js/data.js` — ВСЕ числа баланса и контент: `hero`, `elements`, `enemies`, `relics`, `upgrades`, `floor`.
+- `js/data.js` — ВСЕ числа баланса и контент: `hero`, `elements`, `enemies`, `relics`, `upgrades`,
+  `floor` (зоны этажа с пулами противниц, веса типов комнат, разведка `scout`).
   Правки баланса — только здесь.
 - `js/game.js` (~2400 строк, один IIFE). Разделы помечены комментариями `// ----`:
   - экран и сохранение (`SAVE_KEY`, localStorage), звук (`sfx`, синтез Web Audio), ассеты;
@@ -14,7 +15,11 @@
     `tryBreak`/`breakArmor`, захват кругом `circleGesture`/`tryCapture`/`capture`, сферы `spawnSpheres`/`sphereBurst`/`resolveSwipe`,
     помехи босса `HAZARDS` + `spawnVine`/`updateVines`/`drawVines`/`drawWisps`;
   - отрисовка боя: `renderFight`, `drawTopHud`, `drawBottomHud`;
-  - забег: `genFloor`, `renderMap`/`drawDoor`/`drawMiniMap`, `enterNode`, `afterRunFight`, `EVENTS`, `showRest`;
+  - этаж: `genFloor` = `layoutFloor` (пояса комнат в координатах u вдоль пути / v поперёк, 0…`MAP_V`)
+    + `linkBands` (двери только между соседними поясами, где стены перекрываются ≥ `DOOR_MIN`) + `assignRooms`
+    (типы комнат по правилам `D.floor`); план подземелья `drawFloorMap` (мини и большой, туман `knownRooms`,
+    статичная часть кэшируется в `mapTexture`), выбор комнаты `chooseDoor`/`chooseNode`/`mapPointer`;
+  - забег: `renderMap`/`drawDoor`, `enterNode`, `afterRunFight`, `EVENTS`, `showRest`;
   - ввод: `onPress`/`onMove`/`onRelease` (Pointer Events);
   - API для редактора: `window.CD`; хук автотестов: `window.__proto`.
 - `js/i18n.js` + `js/lang/ru.js`, `js/lang/en.js` — локализация. `t('ключ', {подстановки})` в game.js и editor.js;
@@ -35,4 +40,6 @@
   Не называть локальные переменные `t` в функциях, где вызывается перевод.
 - Репозиторий публичный: только безопасные (R) спрайты.
 - Проверка: headless Chromium через Playwright, хук `window.__proto` (`startFight`, `startRun`,
-  `press/move/release`, `circle`, `captureChance`, `guardCenter`, `chooseDoor`).
+  `press/move/release`, `circle`, `captureChance`, `guardCenter`, `chooseDoor`, `chooseNode`, `genFloor`).
+- Этаж: путь = 1 + сумма `zones[].rooms`, затем босс. Из комнаты 1–3 двери, тупиков и недостижимых комнат нет,
+  двери не пересекаются. После правок генератора — прогнать проверку на нескольких тысячах `genFloor()`.

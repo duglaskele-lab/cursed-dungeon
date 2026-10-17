@@ -437,7 +437,11 @@
   function fillStatic() {
     tplSel.innerHTML = `<option value="">${t('ed.keep')}</option>` + Object.entries(D.enemies)
       .filter(([id]) => CD.isBuiltin(id)).map(([id, e]) => `<option value="${id}">${esc(e.name)}${e.kind === 'boss' ? t('ed.tBoss') : e.kind === 'elite' ? t('ed.tElite') : ''}</option>`).join('');
-    floorBox.innerHTML = D.floor.layers.map((L, i) => (L.pool ? `<label><input type="checkbox" data-layer="${i}"> ${t('ed.layer', { i: i + 1, lvl: L.lvl })}</label>` : '')).join('')
+    let room = 2;      // комната 1 — темница
+    floorBox.innerHTML = D.floor.zones.map((z, i) => {
+      const a = room; room += z.rooms;
+      return `<label><input type="checkbox" data-layer="${i}"> ${t('ed.layer', { i: i + 1, a, b: room - 1, lvl: z.lvl })}</label>`;
+    }).join('')
       + `<label><input type="checkbox" data-floor="elite"> ${t('ed.floorElite')}</label><label><input type="checkbox" data-floor="boss"> ${t('ed.floorBoss')}</label>`;
   }
 
@@ -457,7 +461,8 @@
     const els = (d.spheres && d.spheres.elements) || [];
     root.querySelectorAll('[data-el]').forEach((cb) => { cb.checked = els.includes(cb.dataset.el); });
     const fl = d.floor || {};
-    root.querySelectorAll('[data-layer]').forEach((cb) => { cb.checked = (fl.layers || []).includes(Number(cb.dataset.layer)); });
+    const zones = CD.floorZones(fl);
+    root.querySelectorAll('[data-layer]').forEach((cb) => { cb.checked = zones.includes(Number(cb.dataset.layer)); });
     root.querySelectorAll('[data-floor]').forEach((cb) => { cb.checked = !!fl[cb.dataset.floor]; });
     updateBossFields();
   }
@@ -479,7 +484,7 @@
     }
     d.spheres.elements = [...root.querySelectorAll('[data-el]:checked')].map((cb) => cb.dataset.el);
     d.floor = {
-      layers: [...root.querySelectorAll('[data-layer]:checked')].map((cb) => Number(cb.dataset.layer)),
+      zones: [...root.querySelectorAll('[data-layer]:checked')].map((cb) => Number(cb.dataset.layer)),
       elite: $('[data-floor="elite"]', root).checked,
       boss: $('[data-floor="boss"]', root).checked
     };
@@ -591,7 +596,7 @@
     state.editingId = null; state.images = []; state.source = null; state.dirty = false;
     const d = templateData(Object.keys(D.enemies).find((k) => CD.isBuiltin(k) && D.enemies[k].kind === 'normal') || Object.keys(D.enemies)[0]);
     d.name = t('ed.newName'); d.id = ''; d.subtitle = t('ed.defSub'); d.about = t('ed.defAbout'); d.kind = 'normal';
-    d.floor = { layers: [0, 1], elite: false, boss: false };
+    d.floor = { zones: [0, 1], elite: false, boss: false };
     dataToForm(d);
     renderThumbs();
     setStatus('#edStatus', t('ed.pickSheet'));
@@ -629,7 +634,7 @@
     state.editingId = id; state.tempId = null; state.dirty = false;
     $('#edDelete', root).classList.remove('hidden');
     await refreshList();
-    const inRun = d.floor.layers.length || d.floor.elite || d.floor.boss;
+    const inRun = d.floor.zones.length || d.floor.elite || d.floor.boss;
     setStatus('#edSaveStatus', persistent ? t(inRun ? 'ed.savedRun' : 'ed.saved', { name: d.name }) : t('ed.savedMem'), persistent ? 'ok' : 'err');
     return id;
   }
@@ -721,7 +726,7 @@
       .replace(/\n/g, '\n    ');
     const fl = d.floor;
     const floorLines = [
-      ...fl.layers.map((i) => t('ed.zip.layer', { i, id })),
+      ...fl.zones.map((i) => t('ed.zip.layer', { i, id })),
       fl.elite ? t('ed.zip.elite', { id }) : '',
       fl.boss ? t('ed.zip.boss', { id }) : ''
     ].filter(Boolean);

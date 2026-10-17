@@ -1590,56 +1590,163 @@
     boss:     { name: t('room.boss'),     color: '#c84cff' }
   };
 
+  // ---------------------------------------------------------------- этаж: генерация
+  // Граф как в Slay the Spire, нарисованный планом подземелья. Комнаты стоят «поясами» вдоль пути:
+  // u — вдоль пути (клетки), v — поперёк (0…MAP_V). Двери бывают только между соседними поясами и только там,
+  // где стены двух комнат перекрываются, — поэтому граф всегда плоский, а каждая дверь лежит на общей стене.
+  const MAP_V = 12;
+  const DOOR_MIN = 1.2;            // минимальное перекрытие стен (в клетках), чтобы поставить дверь
+  const ROOM_MIN = 2.4;            // самая узкая комната поперёк пути
+  const NO_REPEAT = ['rest', 'elite', 'treasure'];
   const pickOne = (v) => (Array.isArray(v) ? pick(v) : v);
-  function genFloor() {
-    const F = D.floor;
-    const layers = F.layers.map((L, li) => shuffle(L.rooms).map((type, i) => {
-      const node = { type, li, i, next: [], visited: false, done: false };
-      if (type === 'fight') { node.enemy = pick(L.pool); node.lvl = L.lvl; }
-      if (type === 'elite') { node.enemy = pickOne(F.elite); node.lvl = L.eliteLvl || L.lvl + 1; }
-      if (type === 'boss') { node.enemy = pickOne(L.boss); node.lvl = L.lvl; }
-      return node;
-    }));
-    // соседние бои одного слоя — разные противницы, если можно
-    for (const L of layers) {
-      const fights = L.filter((n) => n.type === 'fight');
-      if (fights.length > 1 && fights[0].enemy === fights[1].enemy) {
-        const pool = F.layers[fights[0].li].pool.filter((p) => p !== fights[0].enemy);
-        if (pool.length) fights[1].enemy = pick(pool);
+  function weighted(keys, w) {
+    let r = Math.random() * keys.reduce((s, k) => s + (w[k] || 1), 0);
+    for (const k of keys) { r -= w[k] || 1; if (r <= 0) return k; }
+    return keys[keys.length - 1];
+  }
+  const overlapV = (a, b) => Math.min(a.v1, b.v1) - Math.max(a.v0, b.v0);
+
+  // k отрезков на [0, MAP_V], каждый не короче min
+  function splitBand(k, min = ROOM_MIN) {
+    const w = Array.from({ length: k }, () => Math.random());
+    const sum = w.reduce((x, y) => x + y, 0), free = MAP_V - k * min;
+    let v = 0;
+    return w.map((x) => { const len = min + free * x / sum, r = [v, v + len]; v += len; return r; });
+  }
+  // Нарезка «в перевязку»: стены нового пояса стоят внутри комнат прежнего — у тех появляются развилки
+  function staggeredBand(prev, k, min = ROOM_MIN) {
+    const spots = prev.map((p) => [p.iv[0] + 1.55, p.iv[1] - 1.55]).filter(([a, b]) => b > a);
+    if (!spots.length) return null;
+    if (spots.length < k - 1) return null;
+    for (let tries = 0; tries < 30; tries++) {
+      // каждая стена — внутри своей комнаты прежнего пояса
+      const cuts = shuffle(spots).slice(0, k - 1).map(([a, b]) => rand(a, b)).sort((x, y) => x - y);
+      const pts = [0, ...cuts, MAP_V];
+      if (pts.every((v, i) => !i || v - pts[i - 1] >= min)) return pts.slice(1).map((v, i) => [pts[i], v]);
+    }
+    return null;
+  }
+  // комната внутри своей клетки, с неровными отступами — между комнатами остаются просветы
+  function roomRect(c, v0, v1) {
+    return { u0: c.u0 + rand(0.15, 0.45), u1: c.u1 - rand(0.15, 0.45), v0: v0 + rand(0.08, 0.22), v1: v1 - rand(0.08, 0.22) };
+  }
+
+  // Пояса комнат: темница, n поясов с событиями, босс. null — не сложилось, нужна новая попытка.
+  function layoutFloor(n) {
+    let u = 0;
+    const col = (w) => { const c = { u0: u, u1: u + w }; u += w; return c; };
+    const sv0 = rand(0, 2.5), sv1 = rand(9.5, 12);
+    const bands = [[{ iv: [sv0, sv1], rect: roomRect(col(rand(5, 6)), sv0, sv1) }]];
+    for (let li = 0; li <= n; li++) {
+      const boss = li === n, prev = bands[bands.length - 1];
+      let rooms = null;
+      for (let tries = 0; tries < 40 && !rooms; tries++) {
+        const u0 = u;
+        const c = col(boss ? rand(6, 7) : rand(3.6, 4.8));
+        const k = weighted(bands.length > 1 ? [2, 3, 4] : [2, 3], { 2: 1, 3: 2.2, 4: 0.8 });   // из темницы — не больше 3 дверей
+        const ivs = boss ? [[rand(0, 1.5), rand(10.5, 12)]]
+          : (bands.length > 1 && Math.random() < 0.8 && staggeredBand(prev, k)) || splitBand(k);
+        const cand = ivs.map(([v0, v1]) => ({ iv: [v0, v1], rect: roomRect(c, v0, v1) }));
+        // у каждой комнаты должна быть дверь назад, у каждой прежней — вперёд
+        const ok = cand.every((r) => prev.some((p) => overlapV(p.rect, r.rect) >= DOOR_MIN))
+          && prev.every((p) => cand.some((r) => overlapV(p.rect, r.rect) >= DOOR_MIN));
+        if (ok) rooms = cand; else u = u0;
+      }
+      if (!rooms) return null;
+      bands.push(rooms);
+    }
+    return { bands, len: u };
+  }
+
+  // Двери между поясами A и B: у каждой комнаты A — от 1 до 3 выходов, в каждую комнату B есть вход
+  function linkBands(A, B) {
+    const doorable = (a, b) => overlapV(a.rect, b.rect) >= DOOR_MIN;
+    const widest = (x, list) => list.reduce((m, y) => (overlapV(x.rect, y.rect) > overlapV(x.rect, m.rect) ? y : m));
+    const link = (a, b) => { if (!a.next.includes(b)) a.next.push(b); };
+    if (A.length === 1 || B.length === 1) {
+      // из темницы — во все комнаты первого пояса, из последнего пояса — к боссу
+      A.forEach((a) => B.forEach((b) => { if (doorable(a, b)) link(a, b); }));
+    } else {
+      A.forEach((a) => link(a, widest(a, B.filter((b) => doorable(a, b)))));
+      B.forEach((b) => {
+        if (!A.some((a) => a.next.includes(b))) link(widest(b, A.filter((a) => doorable(a, b))), b);
+      });
+      A.forEach((a) => B.forEach((b) => { if (doorable(a, b) && a.next.length < 3 && Math.random() < 0.7) link(a, b); }));
+    }
+    A.forEach((a) => a.next.sort((x, y) => x.i - y.i));
+  }
+
+  // Дверь на общей стене a→b: проём через просвет между комнатами
+  function makeDoor(a, b) {
+    const v0 = Math.max(a.rect.v0, b.rect.v0), v1 = Math.min(a.rect.v1, b.rect.v1);
+    const len = Math.min(1.2, v1 - v0 - 0.3);
+    const c = rand(v0 + len / 2 + 0.15, v1 - len / 2 - 0.15);
+    return { ua: a.rect.u1, ub: b.rect.u0, v0: c - len / 2, v1: c + len / 2 };
+  }
+
+  // Типы комнат по поясам: правила из D.floor (weights, eliteFrom, restFrom)
+  function assignRooms(layers, zoneOf) {
+    const F = D.floor, n = zoneOf.length;
+    const parents = (x) => (x.li === 0 ? [] : layers[x.li - 1].filter((p) => p.next.includes(x)));
+    for (let li = 0; li < n; li++) {
+      const num = li + 2;                               // номер комнаты на пути (темница — 1)
+      for (const node of layers[li]) {
+        const opts = li === 0 ? ['fight'] : li === n - 1 ? ['rest']
+          : Object.keys(F.weights).filter((k) => !(k === 'elite' && num < F.eliteFrom) && !(k === 'rest' && (num < F.restFrom || li === n - 2)));
+        const banned = parents(node).map((p) => p.type).filter((x) => NO_REPEAT.includes(x));
+        const allowed = opts.filter((x) => !banned.includes(x));
+        node.type = allowed.length ? weighted(allowed, F.weights) : 'fight';
       }
     }
-    for (let li = 0; li < layers.length - 1; li++) {
-      const A = layers[li], B = layers[li + 1];
-      A.forEach((a, i) => {
-        const j = B.length === 1 ? 0 : Math.round(i * (B.length - 1) / Math.max(1, A.length - 1));
-        a.next.push(B[j]);
-        const k = j + (Math.random() < 0.5 ? -1 : 1);
-        if (B[k] && !a.next.includes(B[k])) a.next.push(B[k]);
-        else if (B[j - (k - j)] && !a.next.includes(B[j - (k - j)])) a.next.push(B[j - (k - j)]);
-      });
-      B.forEach((b) => {
-        if (!A.some((a) => a.next.includes(b))) {
-          let best = A[0], bd = 99;
-          A.forEach((a) => { const d = Math.abs(a.i / Math.max(1, A.length - 1) - b.i / Math.max(1, B.length - 1)); if (d < bd) { bd = d; best = a; } });
-          best.next.push(b);
-        }
-      });
-      A.forEach((a) => a.next.sort((x, y) => x.i - y.i));
+    if (!layers.flat().some((x) => x.type === 'elite')) {
+      const c = layers.slice(0, n - 1).flat().filter((x) => x.type === 'fight' && x.li + 2 >= F.eliteFrom
+        && !parents(x).some((p) => p.type === 'elite') && !x.next.some((y) => y.type === 'elite'));
+      if (c.length) pick(c).type = 'elite';
     }
-    const start = { type: 'start', li: -1, i: 0, next: layers[0].slice(), visited: true, done: false };
-    return { name: F.name, layers, start };
+    for (let li = 0; li < n; li++) {
+      const z = F.zones[zoneOf[li]];
+      for (const node of layers[li]) {
+        if (node.type === 'fight') { node.enemy = pick(z.pool); node.lvl = z.lvl; }
+        if (node.type === 'elite') { node.enemy = pickOne(F.elite); node.lvl = z.lvl + 1; }
+      }
+      // соседние бои одного пояса — разные противницы, если можно
+      const fights = layers[li].filter((x) => x.type === 'fight');
+      for (let k = 1; k < fights.length; k++) {
+        if (fights[k].enemy !== fights[k - 1].enemy) continue;
+        const pool = z.pool.filter((p) => p !== fights[k - 1].enemy);
+        if (pool.length) fights[k].enemy = pick(pool);
+      }
+    }
+    Object.assign(layers[n][0], { type: 'boss', enemy: pickOne(F.boss), lvl: F.bossLvl });
+  }
+
+  function genFloor() {
+    const F = D.floor;
+    const zoneOf = F.zones.flatMap((z, zi) => Array(z.rooms).fill(zi));
+    let lay = null;
+    for (let tries = 0; tries < 500 && !lay; tries++) lay = layoutFloor(zoneOf.length);
+    if (!lay) throw new Error('floor layout failed');
+    const [[start], ...bands] = lay.bands;
+    Object.assign(start, { type: 'start', li: -1, i: 0, next: [], visited: true, done: false });
+    const layers = bands.map((B, li) => B.map((r, i) => Object.assign(r, { type: null, li, i, next: [], visited: false, done: false })));
+    linkBands([start], layers[0]);
+    for (let li = 0; li < layers.length - 1; li++) linkBands(layers[li], layers[li + 1]);
+    for (const a of [start, ...layers.flat()]) a.doors = new Map(a.next.map((b) => [b, makeDoor(a, b)]));
+    assignRooms(layers, zoneOf);
+    return { name: F.name, layers, start, len: lay.len };
   }
 
   function startRun() {
     run = {
       floor: genFloor(),
-      cur: null,
+      cur: null, path: [], scout: D.floor.scout || 1,
       hero: { lvl: 1, xp: 0, hpMax: D.hero.hp, hp: D.hero.hp, seals: D.hero.seals, sealsMax: D.hero.seals, mods: defaultMods(), relics: [], upgrades: [] },
-      captured: [], fights: 0, time: 0, events: shuffle(EVENTS.map((e) => e.id)), trans: null, doors: []
+      captured: [], fights: 0, time: 0, events: shuffle(EVENTS.map((e) => e.id)), trans: null, doors: [], mapHits: []
     };
     run.cur = run.floor.start;
+    run.path = [run.cur];
     fight = null;
-    G.mode = 'map';
+    G.mode = 'map'; G.bigMap = false;
     hideAllOverlays();
     show(ui.pauseBtn);
     showPanel({
@@ -1649,8 +1756,9 @@
     });
   }
 
-  function roomCount() { return run.floor.layers.length; }
-  function curLayerIdx() { return run.cur.li + 1; }
+  // комнат на пути, считая темницу и босса; номер текущей (темница — 1)
+  function roomCount() { return run.floor.layers.length + 1; }
+  function roomNumber() { return run.cur.li + 2; }
 
   // двери текущей комнаты в координатах фона
   function doorSlots(n) {
@@ -1710,7 +1818,7 @@
       ctx.fillStyle = `rgba(0,0,0,${k})`; ctx.fillRect(0, 0, W, H);
     }
     drawMapTopHud();
-    drawMiniMap();
+    drawFloorMap(G.bigMap);
   }
 
   function drawDoor(slot, node) {
@@ -1801,7 +1909,7 @@
     ctx.textAlign = 'left'; ctx.fillStyle = '#e9c27a'; ctx.font = `600 21px ${displayFont}`;
     ctx.fillText(run.floor.name, 20, 36);
     ctx.textAlign = 'right'; ctx.fillStyle = '#b9ae9c'; ctx.font = `500 13px ${bodyFont}`;
-    ctx.fillText(t('map.room', { i: Math.max(0, curLayerIdx()), n: roomCount() }), W - 20, 36);
+    ctx.fillText(t('map.room', { i: roomNumber(), n: roomCount() }), W - 20, 36);
 
     bar(20, 48, W - 40, 15, rh.hp / rh.hpMax, rh.hp / rh.hpMax < 0.3 ? '#d9473f' : '#5fbf6a');
     ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.font = `600 11px ${bodyFont}`;
@@ -1816,41 +1924,196 @@
     ctx.fillText(names.length ? names.slice(-2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '') : t('map.noRelics'), W - 20, 92);
   }
 
-  function drawMiniMap() {
-    const y0 = 800;
-    bottomPanel(y0 - 30);
-    const cols = [run.floor.start, ...run.floor.layers];
-    const colX = (i) => 46 + i * ((W - 92) / (cols.length - 1));
-    const pos = new Map();
-    pos.set(run.floor.start, { x: colX(0), y: y0 + 72 });
-    run.floor.layers.forEach((L, li) => L.forEach((n, j) => pos.set(n, { x: colX(li + 1), y: y0 + 72 + (j - (L.length - 1) / 2) * 46 })));
-    const all = [run.floor.start, ...run.floor.layers.flat()];
-    ctx.save();
-    for (const n of all) {
-      const p = pos.get(n);
-      for (const m of n.next) {
-        const q = pos.get(m);
-        const walked = n.visited && m.visited;
-        ctx.strokeStyle = walked ? 'rgba(233,194,122,.85)' : 'rgba(185,174,156,.22)';
-        ctx.lineWidth = walked ? 3 : 1.5;
-        line(ctx, p.x, p.y, q.x, q.y);
+  // ---------------------------------------------------------------- этаж: план подземелья
+  // Мини-план внизу экрана (путь слева направо) и большой план по нажатию (путь снизу вверх).
+  // Туман: значки видны у пройденных комнат и у тех, куда можно дойти за run.scout дверей; босс виден всегда.
+  const MINI = { x: 18, y: 780, w: 504, h: 144 };
+  const BIG = { x: 26, y: 176, w: 488, h: 690 };
+  function mapView(big) {
+    const len = run.floor.len;
+    if (!big) {
+      const su = MINI.w / len, sv = MINI.h / MAP_V;
+      return { big, A: MINI, pt: (u, v) => [MINI.x + u * su, MINI.y + v * sv] };
+    }
+    const sv = BIG.w / MAP_V, su = BIG.h / len;
+    return { big, A: BIG, pt: (u, v) => [BIG.x + v * sv, BIG.y + BIG.h - u * su] };
+  }
+  function screenRect(view, r) {
+    const [ax, ay] = view.pt(r.u0, r.v0), [bx, by] = view.pt(r.u1, r.v1);
+    return { x0: Math.min(ax, bx), y0: Math.min(ay, by), x1: Math.max(ax, bx), y1: Math.max(ay, by) };
+  }
+  const rectCenter = (r) => [(r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2];
+  const inRect = (r, p) => p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1;
+  const doorRect = (d) => ({ u0: d.ua - 0.12, u1: d.ub + 0.12, v0: d.v0, v1: d.v1 });
+  function allRooms() { return [run.floor.start, ...run.floor.layers.flat()]; }
+
+  // комнаты, чьи значки видны: пройденные и те, до которых не больше run.scout дверей от текущей
+  function knownRooms() {
+    const known = new Set(run.path);
+    let front = [run.cur];
+    for (let d = 0; d < run.scout; d++) {
+      front = front.flatMap((x) => x.next);
+      front.forEach((x) => known.add(x));
+    }
+    return known;
+  }
+
+  // Неизменная часть плана (порода, полы, стены) рисуется один раз на этаж
+  function mapTexture(view) {
+    const f = run.floor, key = view.big ? 'big' : 'mini', k = canvas.width / W, pad = 8, A = view.A;
+    f.tex = f.tex || {};
+    if (f.tex[key] && f.tex[key].k === k) return f.tex[key];
+    const c = document.createElement('canvas');
+    c.width = Math.ceil((A.w + pad * 2) * k); c.height = Math.ceil((A.h + pad * 2) * k);
+    const g = c.getContext('2d');
+    g.scale(k, k); g.translate(pad - A.x, pad - A.y);
+    // скальная порода
+    g.fillStyle = '#0f0c11'; g.fillRect(A.x - pad, A.y - pad, A.w + pad * 2, A.h + pad * 2);
+    for (let i = 0; i < A.w * A.h / 50; i++) {
+      g.fillStyle = `rgba(${randi(50, 90)},${randi(42, 70)},${randi(50, 80)},${rand(0.12, 0.4)})`;
+      g.fillRect(A.x + rand(-pad, A.w + pad), A.y + rand(-pad, A.h + pad), rand(1, 3), rand(1, 2.5));
+    }
+    g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 1;
+    for (let i = 0; i < A.w * A.h / 3000; i++) {
+      let x = A.x + rand(0, A.w), y = A.y + rand(0, A.h);
+      g.beginPath(); g.moveTo(x, y);
+      for (let s = 0; s < 5; s++) { x += rand(-14, 14); y += rand(-14, 14); g.lineTo(x, y); }
+      g.stroke();
+    }
+    const tile = view.big ? 14 : 7, tw = tile * 1.6;
+    for (const n of allRooms()) {
+      const r = screenRect(view, n.rect), w = r.x1 - r.x0, h = r.y1 - r.y0;
+      const boss = n.type === 'boss';
+      g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(r.x0 + 2, r.y0 + 3, w, h);
+      const fl = g.createLinearGradient(r.x0, r.y0, r.x1, r.y1);
+      fl.addColorStop(0, boss ? '#33243f' : '#352c31'); fl.addColorStop(1, boss ? '#1d1426' : '#211b20');
+      g.fillStyle = fl; g.fillRect(r.x0, r.y0, w, h);
+      // плиты пола в перевязку и потёртости
+      g.save(); g.beginPath(); g.rect(r.x0, r.y0, w, h); g.clip();
+      g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 1;
+      for (let y = r.y0, row = 0; y < r.y1; y += tile, row++) {
+        if (row) line(g, r.x0, y, r.x1, y);
+        for (let x = r.x0 + (row % 2 ? tw / 2 : tw) * rand(0.8, 1.1); x < r.x1; x += tw * rand(0.85, 1.15)) line(g, x, y, x, Math.min(y + tile, r.y1));
+      }
+      for (let i = 0; i < w * h / 90; i++) {
+        g.fillStyle = `rgba(255,236,210,${rand(0.02, 0.07)})`;
+        g.fillRect(rand(r.x0, r.x1), rand(r.y0, r.y1), rand(1, 4), rand(1, 2));
+      }
+      g.restore();
+      // стены: тёмная кладка и светлая кромка
+      g.strokeStyle = '#060508'; g.lineWidth = view.big ? 5 : 3.2; g.strokeRect(r.x0, r.y0, w, h);
+      g.strokeStyle = '#75646c'; g.lineWidth = 1.1; g.strokeRect(r.x0 + 0.5, r.y0 + 0.5, w - 1, h - 1);
+      if (boss) {
+        // колонны в углах зала
+        const cr = Math.max(2, Math.min(w, h) * 0.06);
+        for (const [px, py] of [[0.15, 0.15], [0.85, 0.15], [0.15, 0.85], [0.85, 0.85]]) {
+          g.fillStyle = '#0c0910'; g.beginPath(); g.arc(r.x0 + w * px, r.y0 + h * py, cr, 0, Math.PI * 2); g.fill();
+          g.strokeStyle = '#5c4a6e'; g.lineWidth = 1; g.stroke();
+        }
+      }
+      if (n.type === 'start') {
+        // решётка темницы у дальней стены
+        g.strokeStyle = 'rgba(150,140,150,.55)'; g.lineWidth = 1;
+        const bx = r.x0 + w * 0.12, by = r.y0 + h * 0.1, bw = w * 0.3;
+        line(g, bx, by, bx + bw, by);
+        for (let x = bx; x <= bx + bw + 0.1; x += bw / 4) line(g, x, by, x, by + h * 0.18);
       }
     }
-    for (const n of all) {
-      const p = pos.get(n);
-      const reachable = run.cur.done && run.cur.next.includes(n);
-      drawRoomIcon(n.type, p.x, p.y, 14, !(n.visited || reachable));
-      if (n === run.cur) {
-        ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 2.5;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 19 + Math.sin(G.time * 4) * 2, 0, Math.PI * 2); ctx.stroke();
-      } else if (reachable) {
-        ctx.strokeStyle = `rgba(233,194,122,${0.4 + 0.4 * Math.sin(G.time * 5)})`; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 18, 0, Math.PI * 2); ctx.stroke();
+    f.tex[key] = { c, k, pad };
+    return f.tex[key];
+  }
+
+  function drawFloorMap(big) {
+    const view = mapView(big), A = view.A, cur = run.cur;
+    const reach = cur.done && !run.trans && !G.panelOpen ? cur.next : [];
+    const known = knownRooms();
+    const lit = (n) => n.visited || reach.includes(n);
+    if (big) {
+      ctx.fillStyle = 'rgba(4,3,6,.88)'; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center'; ctx.fillStyle = '#e9c27a'; ctx.font = `600 24px ${displayFont}`;
+      ctx.fillText(run.floor.name, W / 2, A.y - 34);
+    } else bottomPanel(738);
+    const tex = mapTexture(view);
+    ctx.drawImage(tex.c, A.x - tex.pad, A.y - tex.pad, A.w + tex.pad * 2, A.h + tex.pad * 2);
+    ctx.strokeStyle = 'rgba(233,194,122,.3)'; ctx.lineWidth = 1.5;
+    roundRect(A.x - tex.pad, A.y - tex.pad, A.w + tex.pad * 2, A.h + tex.pad * 2, 6); ctx.stroke();
+    const rooms = allRooms();
+    // туман: неизведанные комнаты — тёмные силуэты, пройденные чуть притушены
+    for (const n of rooms) {
+      if (n === cur) continue;
+      const r = screenRect(view, n.rect);
+      ctx.fillStyle = lit(n) ? (n.visited ? 'rgba(6,5,9,.35)' : 'rgba(0,0,0,0)') : known.has(n) ? 'rgba(6,5,9,.55)' : 'rgba(6,5,9,.82)';
+      ctx.fillRect(r.x0 - 1, r.y0 - 1, r.x1 - r.x0 + 2, r.y1 - r.y0 + 2);
+    }
+    // факел в текущей комнате
+    {
+      const r = screenRect(view, cur.rect), [x, y] = rectCenter(r);
+      const rad = Math.max(r.x1 - r.x0, r.y1 - r.y0) * (0.75 + 0.04 * Math.sin(G.time * 9));
+      ctx.save(); ctx.beginPath(); ctx.rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0); ctx.clip();
+      ctx.globalCompositeOperation = 'lighter';
+      const gr = ctx.createRadialGradient(x, y, 2, x, y, rad);
+      gr.addColorStop(0, 'rgba(255,170,80,.28)'); gr.addColorStop(1, 'rgba(255,170,80,0)');
+      ctx.fillStyle = gr; ctx.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+      ctx.restore();
+    }
+    // двери: пройденные открыты, двери из текущей комнаты светятся
+    const walked = new Set(run.path.slice(1).map((b, i) => run.path[i].doors.get(b)));
+    const pulse = 0.5 + 0.5 * Math.sin(G.time * 5);
+    for (const a of rooms) {
+      for (const [b, d] of a.doors) {
+        const r = screenRect(view, doorRect(d)), w = r.x1 - r.x0, h = r.y1 - r.y0;
+        ctx.globalAlpha = lit(a) || lit(b) ? 1 : 0.4;
+        if (walked.has(d)) {
+          ctx.fillStyle = '#050307'; ctx.fillRect(r.x0, r.y0, w, h);
+          ctx.strokeStyle = 'rgba(233,194,122,.75)'; ctx.lineWidth = 1; ctx.strokeRect(r.x0, r.y0, w, h);
+        } else {
+          const wood = ctx.createLinearGradient(r.x0, r.y0, r.x1, r.y1);
+          wood.addColorStop(0, '#8a5d36'); wood.addColorStop(1, '#4b2f1b');
+          ctx.fillStyle = wood; ctx.fillRect(r.x0, r.y0, w, h);
+          ctx.strokeStyle = '#140c07'; ctx.lineWidth = 1; ctx.strokeRect(r.x0, r.y0, w, h);
+        }
+        if (a === cur && reach.includes(b)) {
+          ctx.strokeStyle = `rgba(255,214,140,${0.5 + 0.5 * pulse})`; ctx.lineWidth = 2;
+          ctx.strokeRect(r.x0 - 2, r.y0 - 2, w + 4, h + 4);
+        }
+        ctx.globalAlpha = 1;
       }
     }
-    ctx.restore();
+    // путь героя: пунктир через двери
+    if (run.path.length > 1) {
+      ctx.save();
+      ctx.setLineDash(big ? [6, 5] : [3, 3]); ctx.strokeStyle = 'rgba(233,194,122,.75)'; ctx.lineWidth = big ? 2.5 : 1.6;
+      ctx.beginPath();
+      run.path.forEach((n, i) => {
+        const [x, y] = rectCenter(screenRect(view, n.rect));
+        if (i) { const [dx, dy] = rectCenter(screenRect(view, doorRect(run.path[i - 1].doors.get(n)))); ctx.lineTo(dx, dy); ctx.lineTo(x, y); } else ctx.moveTo(x, y);
+      });
+      ctx.stroke(); ctx.restore();
+    }
+    // значки, подсветка доступных комнат, герой
+    run.mapHits = [];
+    for (const n of rooms) {
+      const r = screenRect(view, n.rect), [x, y] = rectCenter(r);
+      const rad = clamp(Math.min(r.x1 - r.x0, r.y1 - r.y0) * 0.3, 7, big ? 20 : 12);
+      if (reach.includes(n)) {
+        ctx.strokeStyle = `rgba(255,214,140,${0.35 + 0.5 * pulse})`; ctx.lineWidth = 2;
+        ctx.strokeRect(r.x0 + 2.5, r.y0 + 2.5, r.x1 - r.x0 - 5, r.y1 - r.y0 - 5);
+        run.mapHits.push({ node: n, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 });
+      }
+      if (known.has(n) || n.type === 'boss') drawRoomIcon(n.type, x, y, rad, n.visited && n !== cur);
+      if (n === cur) {
+        ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x, y, rad + 4 + Math.sin(G.time * 4) * 1.5, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
     ctx.fillStyle = '#d8ccb6'; ctx.textAlign = 'center';
-    fitText(run.cur.done ? t('map.chooseDoor') : '', W / 2, H - 9, W - 24, 13);
+    if (big) fitText(t('map.planHint'), W / 2, A.y + A.h + 40, W - 24, 14);
+    else {
+      ctx.fillStyle = '#8f8494'; ctx.font = `500 10.5px ${bodyFont}`; ctx.textAlign = 'right';
+      ctx.fillText(t('map.expand'), A.x + A.w + 4, A.y - 12);
+      ctx.fillStyle = '#d8ccb6'; ctx.textAlign = 'center';
+      fitText(cur.done ? t('map.chooseDoor') : '', W / 2, H - 9, W - 24, 13);
+    }
   }
 
   function chooseDoor(i) {
@@ -1858,18 +2121,35 @@
     const d = run.doors[i];
     if (!d) return;
     run.trans = { t: 0, dur: 0.7, x: d.cx, y: d.cy, node: d.node };
+    G.bigMap = false;
+    sfx.door();
+  }
+  // переход в соседнюю комнату, выбранную на плане
+  function chooseNode(node) {
+    const i = run.doors.findIndex((d) => d.node === node);
+    if (i >= 0) { chooseDoor(i); return; }
+    if (!run || run.trans || G.panelOpen || !run.cur.done || !run.cur.next.includes(node)) return;
+    run.trans = { t: 0, dur: 0.7, x: W / 2, y: 450, node };
+    G.bigMap = false;
     sfx.door();
   }
 
   function mapPointer(p) {
-    if (!run || run.trans || G.panelOpen || !run.cur.done) return;
-    const i = run.doors.findIndex((d) => p.x >= d.box.x0 && p.x <= d.box.x1 && p.y >= d.box.y0 && p.y <= d.box.y1);
+    if (!run || run.trans || G.panelOpen) return;
+    const hit = run.cur.done && run.mapHits.find((h) => inRect(h, p));
+    if (G.bigMap) { G.bigMap = false; if (hit) chooseNode(hit.node); return; }
+    if (hit) { chooseNode(hit.node); return; }
+    if (p.y >= MINI.y - 20) { G.bigMap = true; return; }
+    if (!run.cur.done) return;
+    const i = run.doors.findIndex((d) => inRect(d.box, p));
     if (i >= 0) chooseDoor(i);
   }
 
   function enterNode(node) {
     node.visited = true;
     run.cur = node;
+    run.path.push(node);
+    G.bigMap = false;
     const rh = run.hero;
     switch (node.type) {
       case 'fight':
@@ -2351,20 +2631,23 @@
 
   // ---------------------------------------------------------------- API для редактора противниц
   D.floor.elite = [].concat(D.floor.elite);
-  D.floor.layers.forEach((L) => { if (L.boss) L.boss = [].concat(L.boss); });
+  D.floor.boss = [].concat(D.floor.boss);
   const BUILTIN = new Set(Object.keys(D.enemies));
   function removeFromFloor(id) {
-    D.floor.layers.forEach((L) => {
-      if (L.pool) L.pool = L.pool.filter((x) => x !== id);
-      if (L.boss) L.boss = L.boss.filter((x) => x !== id);
-    });
+    D.floor.zones.forEach((z) => { z.pool = z.pool.filter((x) => x !== id); });
     D.floor.elite = D.floor.elite.filter((x) => x !== id);
+    D.floor.boss = D.floor.boss.filter((x) => x !== id);
+  }
+  // fl.zones — номера зон этажа; у старых сохранений редактора были fl.layers (слои прежнего этажа)
+  function floorZones(fl) {
+    if (fl.zones) return fl.zones;
+    return (fl.layers || []).map((i) => Math.min(i === 2 ? 1 : i, D.floor.zones.length - 1));
   }
   function applyFloor(id, fl = {}) {
     removeFromFloor(id);
-    (fl.layers || []).forEach((i) => { const L = D.floor.layers[i]; if (L && L.pool) L.pool.push(id); });
+    floorZones(fl).forEach((i) => { const z = D.floor.zones[i]; if (z && !z.pool.includes(id)) z.pool.push(id); });
     if (fl.elite) D.floor.elite.push(id);
-    if (fl.boss) { const L = D.floor.layers.find((x) => x.boss); if (L) L.boss.push(id); }
+    if (fl.boss) D.floor.boss.push(id);
   }
   async function registerEnemy(id, data) {
     const stages = [];
@@ -2384,7 +2667,7 @@
   }
   window.CD = {
     D, G, sfx, ui, show, hide, isBuiltin: (id) => BUILTIN.has(id),
-    registerEnemy, unregisterEnemy, applyFloor,
+    registerEnemy, unregisterEnemy, applyFloor, floorZones,
     hideAll: hideAllOverlays, toMenu, buildMenu,
     startTraining: (id, h, e) => { G.selected = id; G.heroLvl = h; G.enemyLvl = e; startTraining(); }
   };
@@ -2393,7 +2676,7 @@
   window.__proto = {
     G, input, ui,
     get fight() { return fight; }, get run() { return run; },
-    startFight: startTraining, startRun, chooseDoor, heroTap, resolveSwipe,
+    startFight: startTraining, startRun, chooseDoor, chooseNode, genFloor, heroTap, resolveSwipe,
     press: (x, y) => onPress({ x, y }, 99), move: (x, y) => onMove({ x, y }, 99), release: () => onRelease(99),
     // начертить круг жестом (как пальцем): центр, радиус, доля оборота
     circle: (cx, cy, r, turns = 1.05) => {
