@@ -57,6 +57,7 @@
       for (const r of D[sec] || []) if (c[sec] && c[sec][r.id]) Object.assign(r, c[sec][r.id]);
     }
     if (c.floor && D.floor) merge(D.floor, c.floor);
+    if (c.explore && D.explore) merge(D.explore, c.explore);
   }
 
   // Статичные тексты в HTML: data-i18n — текст, data-i18n-html — разметка, data-i18n-aria — подпись кнопки

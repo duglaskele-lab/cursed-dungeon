@@ -7,11 +7,17 @@
 
 - `js/data.js` — ВСЕ числа баланса и контент: `hero`, `elements`, `enemies`, `relics`, `upgrades`,
   `floor` (зоны этажа с пулами противниц, фиксированные комнаты `fixed`, веса типов комнат, разведка `scout`),
-  `squad` (слоты отряда) и `companion` у героинь (бонус по слотам).
+  `squad` (слоты отряда) и `companion` у героинь (бонус по слотам), `group` (сила противниц в группе),
+  `explore` (режим исследования: размер, комнаты, содержимое, монументы, угроза).
   Правки баланса — только здесь.
 - `js/game.js` (~2400 строк, один IIFE). Разделы помечены комментариями `// ----`:
   - экран и сохранение (`SAVE_KEY`, localStorage), звук (`sfx`, синтез Web Audio), ассеты;
   - псевдо-3D фон: `THEMES`, `buildTheme`, `drawBackground` (темы `dungeon`, `spirit`, `jungle`);
+  - противницы в бою: `fight.foes` (`makeFoe`), передняя `setFront` — на неё указывают `fight.enemy/ed/id/layout`;
+    расстановка `foeLayout`/`layoutFoes` (цель) и `posRect` (где нарисована сейчас), задние — `updateBacks`
+    (сферы, нить лечения `fight.threads`, выход вперёд `stepForward`), росчерк по задним `slashBack`;
+    выбыла передняя — `foeDone` (следующая случайная, `updateNextFoe`), задняя — `backDone`; итоги — `fight.results`;
+    близкий кадр при поломке брони — `fight.cam`, `camZoom`;
   - бой: `newFight`, `heroTap`, `heroSlash`, `guardPress`/`enemyImpact` (защита нажатием в круг удара),
     `tryBreak`/`breakArmor`, захват кругом `circleGesture`/`tryCapture`/`capture`, сферы `spawnSpheres`/`sphereBurst`/`resolveSwipe`,
     помехи босса `HAZARDS` + `spawnVine`/`updateVines`/`drawVines`/`drawWisps`;
@@ -22,7 +28,11 @@
     + `linkBands` (двери только между соседними поясами, где стены перекрываются ≥ `DOOR_MIN`) + `assignRooms`
     (типы комнат по правилам `D.floor`); план подземелья `drawFloorMap` (мини и большой, туман `knownRooms`,
     статичная часть кэшируется в `mapTexture`), выбор комнаты `chooseDoor`/`chooseNode`/`mapPointer`;
-  - забег: `renderMap`/`drawDoor`, `enterNode`, `afterRunFight`, `EVENTS`, `showRest`;
+  - забег: `renderMap`/`drawDoor`, `enterNode`, `afterRunFight`, `EVENTS`, `showRest`; экран забега — `runScreen()`
+    (`map` для графа, `explore` для исследования);
+  - режим исследования: `startExplore`, генерация `tryDungeon`/`genDungeon` (клетки `T_WALL/T_ROOM/T_HALL`) и
+    `fillDungeon`, туман `exReveal`/`exLit`, ходьба `exGoTo`/`updateExplore`/`exStep` (угроза, засада `ambushNode`,
+    монументы `useMonument`), отрисовка `renderExplore` (кэш `exTexture`), ввод `explorePointer`;
   - ввод: `onPress`/`onMove`/`onRelease` (Pointer Events);
   - API для редактора: `window.CD`; хук автотестов: `window.__proto`.
 - `js/i18n.js` + `js/lang/ru.js`, `js/lang/en.js` — локализация. `t('ключ', {подстановки})` в game.js и editor.js;
@@ -43,7 +53,10 @@
   Не называть локальные переменные `t` в функциях, где вызывается перевод.
 - Репозиторий публичный: только безопасные (R) спрайты.
 - Проверка: headless Chromium через Playwright, хук `window.__proto` (`startFight`, `startRun`,
-  `press/move/release`, `circle`, `captureChance`, `guardCenter`, `chooseDoor`, `chooseNode`, `genFloor`).
+  `press/move/release`, `circle`, `captureChance`, `guardCenter`, `chooseDoor`, `chooseNode`, `genFloor`,
+  `fightWith(ids, h, e)` — групповой бой, `startExplore`, `genDungeon`, `exGoTo`).
+- Групповой бой: прямо атакует только передняя; задние только помогают. Новая механика боя должна работать
+  и для одной, и для нескольких противниц (одиночный бой — частный случай группы).
 - Отряд: бонус задаётся видом противницы; обычная — 1 бонус и 1 слот, элита/босс — до 3; одна спутница — один слот.
   Бонус здоровья (`hp`) — запас на бой: после боя здоровье героя не выше, чем было до боя.
 - Этаж: путь = 1 + сумма `zones[].rooms`, затем босс. Из комнаты 1–3 двери, тупиков и недостижимых комнат нет,

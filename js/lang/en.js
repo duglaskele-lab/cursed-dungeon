@@ -230,6 +230,17 @@
       'map.chooseDoor': 'Choose a door or a glowing room on the plan',
       'map.expand': 'tap the plan to enlarge',
       'map.planHint': 'Tap a glowing room to go there · tap elsewhere to close',
+      'menu.explore': 'Explore the dungeon',
+      'menu.exploreHint': 'Experimental floor 1: freely explore rooms and corridors in search of the boss. Every step raises the threat — the higher it is, the likelier an ambush. Monuments heal you and lower the threat.',
+      'ex.threat': 'threat',
+      'ex.hint': 'Tap an explored tile to walk there',
+      'ex.hintHigh': 'Threat is high — an ambush may come at any moment',
+      'ex.ambush': 'Ambush!',
+      'ex.ambushSub': "The dungeon's threat caught up with you",
+      'ex.monument': 'Monument: +{hp} health, threat −{th}',
+      'ex.monumentHp': 'Monument: +{hp} health',
+      'ex.monumentTh': 'Monument: threat −{th}',
+      'ex.monumentUsed': 'The monument fades',
       'prologue.kicker': 'Prologue',
       'prologue.title': 'The Cell',
       'prologue.text': "You open your eyes once again on the cold floor of the cell. The curse mark burns on your wrist — the dungeon's mistress won't let you go that easily.\n\nThe exit is somewhere above. Time to climb.",
@@ -492,7 +503,8 @@
         regen: { name: 'Breathing', text: 'Stamina recovers 25% faster.' },
         hp: { name: 'Toughening', text: '+15 max health and heal 15.' }
       },
-      floor: { name: 'Floor 1 — Climbing out of the cells' }
+      floor: { name: 'Floor 1 — Climbing out of the cells' },
+      explore: { name: 'Floor 1 — The Cell Labyrinth' }
     }
   };
 })();
