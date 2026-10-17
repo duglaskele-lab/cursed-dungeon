@@ -37,11 +37,23 @@ window.GAME_DATA = {
     ghost:    { name: 'Призрачный огонь', color: '#5fc6ff', core: '#e6f8ff', effect: 'Горение и замедление заряда' }
   },
 
+  // Отряд: три слота — атакующая (attack), защитная (defense), поддержка (support).
+  // Бонус спутницы зависит только от вида противницы: все пойманные крольчихи дают одно и то же.
+  // У обычных один бонус и один слот; у элиты и боссов — 2–3 бонуса, по одному на слот,
+  // но в отряде она занимает один слот и даёт бонус именно этого слота.
+  // Виды бонусов (bonus) и что делает value:
+  //   dmg — +доля к урону · charge — заряд быстрее на долю · slash — +доля к урону росчерком
+  //   parry — окно парирования +секунды · block — блок пропускает на долю меньше · hp — +здоровье в каждом бою
+  //   regen — выносливость восстанавливается быстрее на долю · spheres — сферы растут медленнее на долю
+  //   stamina — +выносливость
+  squad: ['attack', 'defense', 'support'],
+
   enemies: {
     bunny: {
       name: 'Крольчиха', subtitle: 'Стесняшка с морковкой', kind: 'normal',
       sprites: ['assets/bunny/stage1.png'], armor: 2, chest: 0.66,
       hp: 1050, stamina: 140, stamRegen: 7, xp: 50,
+      companion: { support: { bonus: 'regen', value: 0.25 } },
       attack: { dmg: 6, telegraph: 0.85, follow: 0.65, interval: [1.6, 2.6], strikes: [1, 2] },
       spheres: { every: [6, 8], count: [2, 3], grow: [3.4, 4.4], elements: ['electric'] },
       about: 'Пугается и бьёт часто, но слабо, иногда дважды подряд. Электрические сферы: шок срывает три следующих удара.'
@@ -50,6 +62,7 @@ window.GAME_DATA = {
       name: 'Лиса-жрица', subtitle: 'Хранительница лисьих огней', kind: 'normal',
       sprites: ['assets/miko/stage1.png'], armor: 2, chest: 0.7,
       hp: 1250, stamina: 170, stamRegen: 6, xp: 60,
+      companion: { defense: { bonus: 'parry', value: 0.08 } },
       attack: { dmg: 12, telegraph: 1.1, follow: 0.8, interval: [2.2, 3.2], strikes: [1, 2] },
       spheres: { every: [5.5, 7], count: [2, 3], grow: [3.4, 4.4], elements: ['fire', 'fire', 'ice'] },
       about: 'Неторопливая и спокойная: долгий замах, удобно парировать. Часто зажигает лисьи огни — огненные и ледяные сферы.'
@@ -58,6 +71,7 @@ window.GAME_DATA = {
       name: 'Волчица', subtitle: 'Вожак стаи', kind: 'elite',
       sprites: ['assets/wolf/stage1.png'], armor: 2, chest: 0.7, rage: true,
       hp: 2100, stamina: 290, stamRegen: 7, xp: 140,
+      companion: { attack: { bonus: 'dmg', value: 0.15 }, defense: { bonus: 'block', value: 0.3 } },
       attack: { dmg: 10, telegraph: 0.85, follow: 0.7, interval: [1.9, 2.8], strikes: [1, 3] },
       spheres: { every: [9, 11], count: [2, 2], grow: [3.6, 4.4], elements: ['ice'] },
       about: 'Мини-босс. Серии до трёх ударов. Каждая сломанная часть брони приводит её в ярость: атакует чаще.'
@@ -66,6 +80,7 @@ window.GAME_DATA = {
       name: 'Нэкомата', subtitle: 'Двухвостая повариха подземелья', kind: 'boss',
       sprites: ['assets/nekomata/stage1.png'], armor: 2, chest: 0.68, theme: 'spirit', hazard: 'wisps',
       hp: 4600, stamina: 600, stamRegen: 8, xp: 0,
+      companion: { attack: { bonus: 'charge', value: 0.25 }, defense: { bonus: 'hp', value: 30 }, support: { bonus: 'spheres', value: 0.25 } },
       attack: { dmg: 11, telegraph: 1.05, follow: 0.8, interval: [2.2, 3.2], strikes: [1, 2] },
       spheres: { every: [7, 9], count: [2, 3], grow: [3.6, 4.4], elements: ['ghost', 'ghost', 'fire'] },
       // Фаза меняется на каждой сломанной части брони
@@ -104,19 +119,22 @@ window.GAME_DATA = {
 
   // Этаж: граф как в Slay the Spire, нарисованный планом подземелья.
   // Путь героя: комната 1 — темница (старт), затем по комнате из каждого «пояса» зон, последней — босс.
-  // Сейчас 1 + 9 = 10 комнат и 11-я — босс. Из комнаты 1–3 двери, тупиков нет, назад пути нет.
+  // Сейчас 1 + 10 = 11 комнат и 12-я — босс. Из комнаты 1–3 двери, тупиков нет, назад пути нет.
   floor: {
     name: 'Этаж 1 — Подъём из темницы',
     // зоны по порядку: сколько комнат пути занимают, кто там встречается и какого уровня (элита — на 1 выше)
     zones: [
-      { rooms: 3, pool: ['bunny', 'miko'], lvl: 1 },
-      { rooms: 3, pool: ['bunny', 'miko'], lvl: 2 },
-      { rooms: 3, pool: ['miko', 'bunny'], lvl: 3 }
+      { rooms: 3, pool: ['bunny', 'miko'], lvl: 1 },     // комнаты 2–4
+      { rooms: 4, pool: ['bunny', 'miko'], lvl: 2 },     // комнаты 5–8
+      { rooms: 3, pool: ['miko', 'bunny'], lvl: 3 }      // комнаты 9–11
     ],
     boss: 'nekomata', bossLvl: 4,
     elite: 'wolf',
-    // типы комнат: первая после темницы — всегда бой, последняя перед боссом — всегда привал;
-    // привал, элита и сокровище не идут два раза подряд; на этаже есть хотя бы одна элита
+    // комнаты с заранее известным типом (по номеру на пути): бой сразу после темницы,
+    // гарантированный привал посередине этажа и привал перед боссом
+    fixed: { 2: 'fight', 7: 'rest', 11: 'rest' },
+    // остальные — случайно по весам; привал, элита и сокровище не идут два раза подряд;
+    // на этаже есть хотя бы одна элита
     weights: { fight: 5, event: 2, treasure: 1, rest: 1.2, elite: 1.3 },
     eliteFrom: 4,   // элита — начиная с комнаты №4
     restFrom: 5,    // привал — начиная с комнаты №5

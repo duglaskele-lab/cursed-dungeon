@@ -6,7 +6,8 @@
 ## Где что лежит
 
 - `js/data.js` — ВСЕ числа баланса и контент: `hero`, `elements`, `enemies`, `relics`, `upgrades`,
-  `floor` (зоны этажа с пулами противниц, веса типов комнат, разведка `scout`).
+  `floor` (зоны этажа с пулами противниц, фиксированные комнаты `fixed`, веса типов комнат, разведка `scout`),
+  `squad` (слоты отряда) и `companion` у героинь (бонус по слотам).
   Правки баланса — только здесь.
 - `js/game.js` (~2400 строк, один IIFE). Разделы помечены комментариями `// ----`:
   - экран и сохранение (`SAVE_KEY`, localStorage), звук (`sfx`, синтез Web Audio), ассеты;
@@ -14,6 +15,8 @@
   - бой: `newFight`, `heroTap`, `heroSlash`, `guardPress`/`enemyImpact` (защита нажатием в круг удара),
     `tryBreak`/`breakArmor`, захват кругом `circleGesture`/`tryCapture`/`capture`, сферы `spawnSpheres`/`sphereBurst`/`resolveSwipe`,
     помехи босса `HAZARDS` + `spawnVine`/`updateVines`/`drawVines`/`drawWisps`;
+  - отряд: `BONUS` (виды бонусов → модификаторы героя), `withSquad` (накладывает бонусы на `mods` в `makeHero`),
+    `squadMember`/`setSquad` (сохраняется в `save.squad`), выбор — `pickCompanion`/`showSquadPanel`;
   - отрисовка боя: `renderFight`, `drawTopHud`, `drawBottomHud`;
   - этаж: `genFloor` = `layoutFloor` (пояса комнат в координатах u вдоль пути / v поперёк, 0…`MAP_V`)
     + `linkBands` (двери только между соседними поясами, где стены перекрываются ≥ `DOOR_MIN`) + `assignRooms`
@@ -41,5 +44,7 @@
 - Репозиторий публичный: только безопасные (R) спрайты.
 - Проверка: headless Chromium через Playwright, хук `window.__proto` (`startFight`, `startRun`,
   `press/move/release`, `circle`, `captureChance`, `guardCenter`, `chooseDoor`, `chooseNode`, `genFloor`).
+- Отряд: бонус задаётся видом противницы; обычная — 1 бонус и 1 слот, элита/босс — до 3; одна спутница — один слот.
+  Бонус здоровья (`hp`) — запас на бой: после боя здоровье героя не выше, чем было до боя.
 - Этаж: путь = 1 + сумма `zones[].rooms`, затем босс. Из комнаты 1–3 двери, тупиков и недостижимых комнат нет,
   двери не пересекаются. После правок генератора — прогнать проверку на нескольких тысячах `genFloor()`.

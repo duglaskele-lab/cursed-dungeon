@@ -57,12 +57,13 @@
 
   // ---------------------------------------------------------------- сохранение
   const SAVE_KEY = 'cursed_dungeon_proto_v1';
+  function emptySquad() { return { attack: null, defense: null, support: null }; }
   function loadSave() {
     try {
       const s = JSON.parse(localStorage.getItem(SAVE_KEY));
-      if (s && s.captured) { s.fights = s.fights || []; s.runs = s.runs || []; return s; }
+      if (s && s.captured) { s.fights = s.fights || []; s.runs = s.runs || []; s.squad = s.squad || emptySquad(); return s; }
     } catch (e) { /* хранилище недоступно */ }
-    return { captured: {}, fights: [], runs: [], muted: false };
+    return { captured: {}, fights: [], runs: [], muted: false, squad: emptySquad() };
   }
   let save = loadSave();
   function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* ignore */ } }
@@ -339,16 +340,55 @@
   function spriteIndex(nSprites, broken, parts) { return nSprites <= 1 ? 0 : Math.min(nSprites - 1, Math.floor(broken * (nSprites - 1) / Math.max(1, parts))); }
   function spriteFor(ed, broken) { return ed.sprites[spriteIndex(ed.sprites.length, broken, armorParts(ed, ed.sprites.length))]; }
   function levelMod(attackerLvl, defenderLvl) { return Math.pow(D.levelDiffFactor, attackerLvl - defenderLvl); }
-  function defaultMods() { return { dmgMul: 1, chargeSpeed: 1, parryBonus: 0, tapCostMul: 1, stamAdd: 0, regenMul: 1 }; }
+  function defaultMods() { return { dmgMul: 1, chargeSpeed: 1, parryBonus: 0, tapCostMul: 1, stamAdd: 0, regenMul: 1, slashMul: 1, blockMul: 1, hpAdd: 0, sphereSlow: 1 }; }
+
+  // ---------------------------------------------------------------- отряд
+  // Слоты D.squad: атакующая, защитная, поддержка. Бонус задаётся видом противницы (companion в data.js).
+  const BONUS = {
+    dmg: (m, v) => { m.dmgMul *= 1 + v; },
+    charge: (m, v) => { m.chargeSpeed *= 1 + v; },
+    slash: (m, v) => { m.slashMul *= 1 + v; },
+    parry: (m, v) => { m.parryBonus += v; },
+    block: (m, v) => { m.blockMul *= 1 - v; },
+    hp: (m, v) => { m.hpAdd += v; },
+    regen: (m, v) => { m.regenMul *= 1 + v; },
+    spheres: (m, v) => { m.sphereSlow *= 1 + v; },
+    stamina: (m, v) => { m.stamAdd += v; }
+  };
+  const ABSOLUTE = ['parry', 'hp', 'stamina'];      // value — число, а не доля
+  function bonusText(b) { return t('bonus.' + b.bonus, { v: ABSOLUTE.includes(b.bonus) ? b.value : Math.round(b.value * 100) }); }
+  // слоты, в которые может встать вид противницы
+  function companionSlots(id) { const c = D.enemies[id] && D.enemies[id].companion; return c ? D.squad.filter((s) => c[s]) : []; }
+  function slotBonus(id, slot) { const c = D.enemies[id] && D.enemies[id].companion; return c && c[slot]; }
+  // кто сейчас в слоте (только пойманные и подходящие)
+  function squadMember(slot) {
+    const id = save.squad[slot];
+    return id && save.captured[id] && slotBonus(id, slot) ? id : null;
+  }
+  function withSquad(mods) {
+    const m = { ...defaultMods(), ...mods };
+    for (const slot of D.squad) {
+      const id = squadMember(slot);
+      const b = id && slotBonus(id, slot);
+      if (b && BONUS[b.bonus]) BONUS[b.bonus](m, b.value);
+    }
+    return m;
+  }
+  function setSquad(slot, id) {
+    for (const s of D.squad) if (id && save.squad[s] === id) save.squad[s] = null;   // одна спутница — один слот
+    save.squad[slot] = id;
+    writeSave();
+  }
   function xpNeed(lvl) { return D.xp.base + D.xp.perLvl * lvl; }
 
   function makeHero(lvl, rh) {
     const hd = D.hero;
-    const mods = rh ? rh.mods : defaultMods();
-    const hpMax = rh ? rh.hpMax : hd.hp + hd.hpPerLvl * (lvl - 1);
+    const mods = withSquad(rh ? rh.mods : defaultMods());
+    // бонус здоровья от отряда — запас на один бой, сверх обычного здоровья
+    const hpMax = (rh ? rh.hpMax : hd.hp + hd.hpPerLvl * (lvl - 1)) + mods.hpAdd;
     const stamMax = hd.stamina + mods.stamAdd;
     return {
-      lvl, hpMax, hp: rh ? rh.hp : hpMax, stamMax, stam: stamMax,
+      lvl, hpMax, hp: (rh ? rh.hp : hpMax - mods.hpAdd) + mods.hpAdd, stamMax, stam: stamMax,
       dmg: hd.dmg * (1 + hd.dmgPerLvl * (lvl - 1)) * mods.dmgMul,
       mods, relics: rh ? rh.relics : [],
       chargeT: 0, exhausted: false, lastStamUse: -9,
@@ -541,7 +581,7 @@
     let crit = false;
     if (fight.weak && pathHitsCircle(path, fight.weak.x, fight.weak.y, 40)) { crit = true; mult *= hasRelic(h, 'claw') ? 3 : 2; enemyStamina(e, 8 * h.stamPower); fight.weak = null; }
     const ex = (h.exhausted ? 0.2 : 1) * (h.entangled > 0 ? 0.5 : 1);
-    const dmg = h.dmg * 1.3 * levelMod(h.lvl, e.lvl) * mult * armorBonus(e) * ex * rand(0.92, 1.08);
+    const dmg = h.dmg * 1.3 * h.mods.slashMul * levelMod(h.lvl, e.lvl) * mult * armorBonus(e) * ex * rand(0.92, 1.08);
     const mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2;
     damageEnemy(dmg, mx, my - 20, crit ? '#ffd060' : '#9fe3ff', true);
     floatText(mx, my - 62, crit ? t('fight.slashCrit') : t('fight.slash'), '#bfefff', 24);
@@ -692,7 +732,7 @@
     }
     if (holding) {
       fight.fx.shields.push({ x: c.x, y: c.y, r: GUARD_R, t: 0, life: 0.45, color: '#ffe28a' });
-      const taken = dmg * D.hero.blockTaken;
+      const taken = dmg * D.hero.blockTaken * h.mods.blockMul;
       hurtHero(taken, false);
       enemyStamina(e, 6 * h.stamPower);
       fight.stats.blocks++;
@@ -722,7 +762,7 @@
   function spawnSpheres(e) {
     const sd = e.sph;
     const n = randi(sd.count[0], sd.count[1]);
-    const slow = hasRelic(fight.hero, 'bell') ? 1.3 : 1;
+    const slow = (hasRelic(fight.hero, 'bell') ? 1.3 : 1) * fight.hero.mods.sphereSlow;
     for (let i = 0; i < n && fight.spheres.length < 5; i++) {
       let x, y, ok = false;
       for (let tries = 0; tries < 30 && !ok; tries++) {
@@ -1484,15 +1524,23 @@
     if (h.chill > 0) pill(t('pill.chill', { s: h.chill.toFixed(1) }), D.elements.ice.color);
     if (h.entangled > 0) pill(t('pill.hazard', { name: fight.hazard.status, s: h.entangled.toFixed(1) }), fight.hazard.color);
 
-    const labels = [t('slot.vanguard'), t('slot.blade'), t('slot.rear')];
-    for (let i = 0; i < 3; i++) {
-      const x = 20 + i * 54, y = y0 + 138;
-      ctx.fillStyle = 'rgba(255,255,255,.04)'; roundRect(x, y, 44, 40, 8); ctx.fill();
-      ctx.strokeStyle = 'rgba(233,194,122,.25)'; ctx.setLineDash([4, 4]); roundRect(x, y, 44, 40, 8); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = '#6f6578'; ctx.font = `500 10px ${bodyFont}`; ctx.textAlign = 'center';
-      ctx.fillText(labels[i], x + 22, y + 52);
-      ctx.font = `600 16px ${displayFont}`; ctx.fillText('?', x + 22, y + 26);
-    }
+    D.squad.forEach((slot, i) => {
+      const x = 20 + i * 54, y = y0 + 138, id = squadMember(slot);
+      if (id && assets[id]) {
+        // портрет спутницы: верх спрайта
+        const st = assets[id].stages[0], sw = st.w * 0.42, sh = sw * 40 / 44;
+        ctx.save(); ctx.fillStyle = '#241a28'; roundRect(x, y, 44, 40, 8); ctx.fill(); ctx.clip();
+        ctx.drawImage(st.img, (st.w - sw) / 2, st.h * 0.02, sw, sh, x, y, 44, 40);
+        ctx.restore();
+        ctx.strokeStyle = 'rgba(233,194,122,.8)'; ctx.lineWidth = 1.5; roundRect(x, y, 44, 40, 8); ctx.stroke();
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,.04)'; roundRect(x, y, 44, 40, 8); ctx.fill();
+        ctx.strokeStyle = 'rgba(233,194,122,.25)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]); roundRect(x, y, 44, 40, 8); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#6f6578'; ctx.font = `600 16px ${displayFont}`; ctx.textAlign = 'center'; ctx.fillText('?', x + 22, y + 26);
+      }
+      ctx.fillStyle = id ? '#d8ccb6' : '#6f6578'; ctx.textAlign = 'center';
+      fitText(t('slot.' + slot), x + 22, y + 52, 52, 10);
+    });
     drawSeals(196, y0 + 152, h.seals, h.sealsMax);
 
     const cx = 456, cy = y0 + 90, r = 42;
@@ -1691,15 +1739,17 @@
     for (let li = 0; li < n; li++) {
       const num = li + 2;                               // номер комнаты на пути (темница — 1)
       for (const node of layers[li]) {
-        const opts = li === 0 ? ['fight'] : li === n - 1 ? ['rest']
-          : Object.keys(F.weights).filter((k) => !(k === 'elite' && num < F.eliteFrom) && !(k === 'rest' && (num < F.restFrom || li === n - 2)));
+        const fixed = F.fixed && F.fixed[num];
+        // привал не ставим прямо перед гарантированным привалом
+        const opts = fixed ? [fixed]
+          : Object.keys(F.weights).filter((k) => !(k === 'elite' && num < F.eliteFrom) && !(k === 'rest' && (num < F.restFrom || (F.fixed && F.fixed[num + 1] === 'rest'))));
         const banned = parents(node).map((p) => p.type).filter((x) => NO_REPEAT.includes(x));
         const allowed = opts.filter((x) => !banned.includes(x));
         node.type = allowed.length ? weighted(allowed, F.weights) : 'fight';
       }
     }
     if (!layers.flat().some((x) => x.type === 'elite')) {
-      const c = layers.slice(0, n - 1).flat().filter((x) => x.type === 'fight' && x.li + 2 >= F.eliteFrom
+      const c = layers.slice(0, n).flat().filter((x) => x.type === 'fight' && !(F.fixed && F.fixed[x.li + 2]) && x.li + 2 >= F.eliteFrom
         && !parents(x).some((p) => p.type === 'elite') && !x.next.some((y) => y.type === 'elite'));
       if (c.length) pick(c).type = 'elite';
     }
@@ -1749,10 +1799,61 @@
     G.mode = 'map'; G.bigMap = false;
     hideAllOverlays();
     show(ui.pauseBtn);
+    showPrologue();
+  }
+
+  // темница — хаб: перед подъёмом можно собрать отряд
+  function showPrologue() {
     showPanel({
       kicker: t('prologue.kicker'), title: t('prologue.title'),
       text: t('prologue.text'),
-      choices: [{ title: t('prologue.go'), desc: t('prologue.goDesc'), on: () => { run.cur.done = true; hidePanel(); } }]
+      choices: [
+        { title: t('prologue.go'), desc: t('prologue.goDesc'), on: () => { run.cur.done = true; hidePanel(); } },
+        { title: t('prologue.squad'), desc: squadSummary(), on: () => showSquadPanel(showPrologue) }
+      ]
+    });
+  }
+
+  // ---------------------------------------------------------------- отряд: выбор спутниц
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  function squadSummary() {
+    return D.squad.map((s) => { const id = squadMember(s); return `${t('slot.' + s)}: ${id ? D.enemies[id].name : t('squad.empty')}`; }).join(' · ');
+  }
+  function companionLine(id) {
+    return companionSlots(id).map((s) => `${t('slot.' + s).toLowerCase()} — ${bonusText(slotBonus(id, s))}`).join('; ');
+  }
+  // список спутниц для слота: пойманные можно выбрать, остальные видны как подсказка
+  function pickCompanion(slot, back) {
+    const cur = squadMember(slot);
+    const ids = Object.keys(D.enemies).filter((id) => slotBonus(id, slot))
+      .sort((a, b) => (save.captured[b] ? 1 : 0) - (save.captured[a] ? 1 : 0));
+    const choices = ids.map((id) => {
+      const caught = !!save.captured[id];
+      const other = D.squad.find((s) => s !== slot && squadMember(s) === id);
+      const note = !caught ? t('squad.notCaught') : other ? t('squad.inSlot', { slot: t('slot.' + other).toLowerCase() }) : '';
+      return {
+        title: D.enemies[id].name, desc: cap(bonusText(slotBonus(id, slot))) + (note ? ' · ' + note : ''),
+        ck: id === cur ? t('squad.here') : '', disabled: !caught, on: () => { setSquad(slot, id); back(); }
+      };
+    });
+    if (cur) choices.push({ title: t('squad.free'), on: () => { setSquad(slot, null); back(); } });
+    choices.push({ title: t('squad.back'), on: back });
+    showPanel({ kicker: t('squad.title'), title: t('slot.' + slot), img: cur ? D.enemies[cur].sprites[0] : null, text: ids.length ? t('squad.pickText') : t('squad.noCompanion'), choices });
+  }
+  function showSquadPanel(done) {
+    showPanel({
+      kicker: t('squad.title'), title: t('squad.title'), text: t('squad.text'),
+      choices: [
+        ...D.squad.map((slot) => {
+          const id = squadMember(slot);
+          return {
+            title: `${t('slot.' + slot)}: ${id ? D.enemies[id].name : t('squad.empty')}`,
+            desc: id ? cap(bonusText(slotBonus(id, slot))) : t('squad.emptyDesc'),
+            on: () => pickCompanion(slot, () => showSquadPanel(done))
+          };
+        }),
+        { title: t('squad.done'), on: done }
+      ]
     });
   }
 
@@ -2198,7 +2299,7 @@
 
   function afterRunFight() {
     const f = fight, rh = run.hero, node = run.cur;
-    rh.hp = Math.max(0, Math.round(f.hero.hp));
+    rh.hp = clamp(Math.round(f.hero.hp), 0, rh.hp);      // запас здоровья от отряда после боя сгорает
     rh.seals = f.hero.seals;
     run.fights++;
     run.time += f.endT;
@@ -2209,7 +2310,10 @@
     const xp = Math.round(base * (f.outcome === 'captured' ? 0.8 : f.outcome === 'escaped' ? 0.5 : 1));
     const lv = grantXp(xp);
     const lines = [t('reward.xp', { n: xp })];
-    if (f.outcome === 'captured') lines.push(t('reward.caught', { name: f.ed.name }));
+    if (f.outcome === 'captured') {
+      lines.push(t('reward.caught', { name: f.ed.name }));
+      if (companionSlots(f.id).length) lines.push(t('reward.joins', { list: companionLine(f.id) }));
+    }
     if (lv) lines.push(t('reward.lvl', { n: rh.lvl }));
     lines.push('', t('reward.pick'));
     const choices = [];
@@ -2270,6 +2374,7 @@
       choices: [
         { title: t('rest.rest'), desc: t('rest.restDesc'), on: () => { heal(0.35); roomDone(); } },
         { title: t('rest.train'), desc: t('rest.trainDesc'), on: () => showUpgradePick(t('up.trainTitle'), t('up.trainText')) },
+        { title: t('rest.squad'), desc: squadSummary(), on: () => showSquadPanel(showRest) },
         { title: t('rest.talk'), desc: caught ? t('rest.talkSoon') : t('rest.talkNone'), disabled: true }
       ]
     });
@@ -2475,9 +2580,20 @@
         <div class="portrait"><img src="${e.sprites[0]}" alt=""></div>
         ${kind ? `<div class="badge kind">${kind}</div>` : ''}
         ${save.captured[id] ? `<div class="badge">${t('menu.caught')}</div>` : ''}
-        <div class="info"><div class="name">${e.name}</div><div class="tag">${e.subtitle}${e.custom ? t('menu.custom') : ''}</div><div class="about">${e.about}</div></div>`;
+        <div class="info"><div class="name">${e.name}</div><div class="tag">${e.subtitle}${e.custom ? t('menu.custom') : ''}</div><div class="about">${e.about}</div>${companionSlots(id).length ? `<div class="tag">${t('squad.cardLine', { list: companionLine(id) })}</div>` : ''}</div>`;
       b.addEventListener('click', () => { G.selected = id; buildMenu(); });
       cards.appendChild(b);
+    }
+    const sq = $('#squad');
+    sq.innerHTML = '';
+    for (const slot of D.squad) {
+      const id = squadMember(slot), e = id && D.enemies[id];
+      const b = document.createElement('button');
+      b.className = 'slot' + (id ? ' on' : '');
+      b.innerHTML = `<div class="portrait">${e ? `<img src="${e.sprites[0]}" alt="">` : '<span class="q">?</span>'}</div>
+        <div class="sl">${t('slot.' + slot)}</div><div class="nm">${e ? e.name : t('squad.empty')}</div><div class="bn">${e ? cap(bonusText(slotBonus(id, slot))) : ''}</div>`;
+      b.addEventListener('click', () => { sfx.ensure(); pickCompanion(slot, () => { hidePanel(); buildMenu(); }); });
+      sq.appendChild(b);
     }
     $('#lvHero').textContent = G.heroLvl;
     $('#lvEnemy').textContent = G.enemyLvl;
@@ -2501,7 +2617,8 @@
     for (const [id, c] of caught) {
       if (!D.enemies[id]) continue;
       const row = document.createElement('div');
-      row.innerHTML = `<span>${D.enemies[id].name}</span><span>${t('lvl', { n: c.lvl })}${c.times > 1 ? t('col.times', { n: c.times }) : ''}</span>`;
+      const slots = companionSlots(id).map((s) => t('slot.' + s).toLowerCase()).join(', ');
+      row.innerHTML = `<span>${D.enemies[id].name}${slots ? ` · ${slots}` : ''}</span><span>${t('lvl', { n: c.lvl })}${c.times > 1 ? t('col.times', { n: c.times }) : ''}</span>`;
       col.appendChild(row);
     }
     $('#soundBtn').textContent = t(sfx.muted ? 'sound.off' : 'sound.on');
@@ -2534,7 +2651,7 @@
   $('#pauseSoundBtn').addEventListener('click', () => { sfx.toggle(); buildMenu(); });
   $('#resetBtn').addEventListener('click', () => {
     if (!confirm(t('confirm.reset'))) return;
-    save = { captured: {}, fights: [], runs: [], muted: sfx.muted }; writeSave(); buildMenu();
+    save = { captured: {}, fights: [], runs: [], muted: sfx.muted, squad: emptySquad() }; writeSave(); buildMenu();
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && G.mode === 'fight' && fight && !fight.over) { G.paused = true; resetInput(); buildMenu(); show(ui.pause); }
