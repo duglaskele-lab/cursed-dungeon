@@ -329,7 +329,7 @@
   }
 
   // ---------------------------------------------------------------- состояние игры
-  const G = { mode: 'loading', paused: false, panelOpen: false, time: 0, selected: 'miko', heroLvl: 1, enemyLvl: 1 };
+  const G = { mode: 'loading', paused: false, panelOpen: false, time: 0, selected: 'miko', heroLvl: 1, enemyLvl: 1, count: 1 };
   let fight = null;
   let run = null;
   const input = { down: false, id: null, x: 0, y: 0, sx: 0, sy: 0, downT: 0, downReal: 0, path: [], swiping: false, guardPress: false, lastTapT: -9 };
@@ -2037,7 +2037,7 @@
     for (let li = 0; li < n; li++) {
       const z = F.zones[zoneOf[li]];
       for (const node of layers[li]) {
-        if (node.type === 'fight') { node.enemy = pick(z.pool); node.lvl = z.lvl; }
+        if (node.type === 'fight') { node.enemy = pick(z.pool); node.lvl = z.lvl; node.enemies = groupFor(node.enemy, z); }
         if (node.type === 'elite') { node.enemy = pickOne(F.elite); node.lvl = z.lvl + 1; }
       }
       // соседние бои одного пояса — разные противницы, если можно
@@ -2049,6 +2049,15 @@
       }
     }
     Object.assign(layers[n][0], { type: 'boss', enemy: pickOne(F.boss), lvl: F.bossLvl });
+  }
+
+  // Состав обычного боя: иногда к противнице присоединяются ещё одна-две из пула зоны
+  function groupFor(first, z) {
+    const [p2, p3] = z.group || [0, 0], r = Math.random();
+    const n = r < p3 ? 3 : r < p3 + p2 ? 2 : 1;
+    const ids = [first];
+    while (ids.length < n) ids.push(pick(z.pool.filter((id) => !ids.includes(id)).concat(z.pool.length < n ? z.pool : [])));
+    return ids;
   }
 
   function genFloor() {
@@ -2239,7 +2248,7 @@
     ctx.textAlign = 'center'; ctx.font = `600 15px ${displayFont}`;
     ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(8,6,12,.9)';
     const label = node.type === 'fight' || node.type === 'elite' || node.type === 'boss'
-      ? t('door.lvl', { name: R.name, n: node.lvl }) : R.name;
+      ? t(node.enemies && node.enemies.length > 1 ? 'door.group' : 'door.lvl', { name: R.name, n: node.lvl, k: node.enemies ? node.enemies.length : 1 }) : R.name;
     ctx.strokeText(label, ix, iy + 46); ctx.fillStyle = R.color; ctx.fillText(label, ix, iy + 46);
     ctx.restore();
   }
@@ -2482,7 +2491,14 @@
         ctx.strokeRect(r.x0 + 2.5, r.y0 + 2.5, r.x1 - r.x0 - 5, r.y1 - r.y0 - 5);
         run.mapHits.push({ node: n, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 });
       }
-      if (known.has(n) || n.type === 'boss') drawRoomIcon(n.type, x, y, rad, n.visited && n !== cur);
+      if (known.has(n) || n.type === 'boss') {
+        drawRoomIcon(n.type, x, y, rad, n.visited && n !== cur);
+        if (n.enemies && n.enemies.length > 1) {
+          ctx.font = `700 ${big ? 13 : 9}px ${bodyFont}`; ctx.textAlign = 'center';
+          ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(8,6,12,.9)'; ctx.strokeText('×' + n.enemies.length, x + rad, y + rad + 2);
+          ctx.fillStyle = '#ff9a7a'; ctx.fillText('×' + n.enemies.length, x + rad, y + rad + 2);
+        }
+      }
       if (n === cur) {
         ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(x, y, rad + 4 + Math.sin(G.time * 4) * 1.5, 0, Math.PI * 2); ctx.stroke();
@@ -2573,7 +2589,7 @@
   }
 
   function startRunFight(node) {
-    newFight(node.enemy, run.hero.lvl, node.lvl, { runHero: run.hero });
+    newFight(node.enemies || node.enemy, run.hero.lvl, node.lvl, { runHero: run.hero });
     G.mode = 'fight'; G.paused = false;
     hideAllOverlays(); show(ui.pauseBtn);
   }
@@ -2883,7 +2899,10 @@
     $('#lvEnemy').textContent = G.enemyLvl;
     const d = G.heroLvl - G.enemyLvl;
     const boss = D.enemies[G.selected].kind === 'boss';
-    $('#lvHint').textContent = boss ? t('hint.boss')
+    if (boss) G.count = 1;            // босс сражается один
+    $('#lvCount').textContent = G.count;
+    $('#lvHint').textContent = G.count > 1 ? t('hint.group', { n: G.count })
+      : boss ? t('hint.boss')
       : d === 0 ? t('hint.equal')
       : d > 0 ? t('hint.stronger', { n: d })
       : t('hint.weaker', { n: -d });
@@ -2912,8 +2931,8 @@
 
   document.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('click', () => {
     const [who, d] = b.dataset.step.split(':');
-    const key = who === 'hero' ? 'heroLvl' : 'enemyLvl';
-    G[key] = clamp(G[key] + Number(d), 1, 10);
+    const key = who === 'hero' ? 'heroLvl' : who === 'count' ? 'count' : 'enemyLvl';
+    G[key] = clamp(G[key] + Number(d), 1, key === 'count' ? 3 : 10);
     buildMenu();
   }));
   $('#runBtn').addEventListener('click', () => { sfx.ensure(); startRun(); });
@@ -2944,7 +2963,11 @@
 
   function startTraining() {
     run = null;
-    newFight(G.selected, G.heroLvl, G.enemyLvl);
+    // в группе к выбранной добавляются случайные обычные противницы
+    const others = Object.keys(D.enemies).filter((id) => id !== G.selected && D.enemies[id].kind !== 'boss');
+    const ids = [G.selected];
+    while (ids.length < G.count && others.length) ids.push(pick(others.filter((id) => !ids.includes(id)).concat(others.length < G.count ? others : [])));
+    newFight(ids, G.heroLvl, G.enemyLvl);
     G.mode = 'fight'; G.paused = false;
     hideAllOverlays(); show(ui.pauseBtn);
   }
@@ -3074,7 +3097,7 @@
     D, G, sfx, ui, show, hide, isBuiltin: (id) => BUILTIN.has(id),
     registerEnemy, unregisterEnemy, applyFloor, floorZones,
     hideAll: hideAllOverlays, toMenu, buildMenu,
-    startTraining: (id, h, e) => { G.selected = id; G.heroLvl = h; G.enemyLvl = e; startTraining(); }
+    startTraining: (id, h, e) => { G.selected = id; G.heroLvl = h; G.enemyLvl = e; G.count = 1; startTraining(); }
   };
 
   // хук для автотестов и отладки

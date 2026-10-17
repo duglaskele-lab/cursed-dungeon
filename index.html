@@ -74,7 +74,8 @@
   }
   .badge.kind { left: calc(var(--u)*7); right: auto; background: rgba(226,85,75,.92); color: #fff; }
 
-  .levels { align-self: stretch; display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u)*12); margin-top: calc(var(--u)*12); }
+  .levels { align-self: stretch; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: calc(var(--u)*10); margin-top: calc(var(--u)*12); }
+  .levels .stepper .row { gap: calc(var(--u)*8); }
   .stepper {
     border: 1px solid var(--line); border-radius: calc(var(--u)*10); background: var(--panel);
     padding: calc(var(--u)*10); display: flex; flex-direction: column; align-items: center; gap: calc(var(--u)*6);
@@ -239,6 +240,7 @@
     <div class="levels">
       <div class="stepper"><div class="lbl" data-i18n="menu.hero">Герой</div><div class="row"><button class="round" data-step="hero:-1">−</button><div class="val" id="lvHero">1</div><button class="round" data-step="hero:1">+</button></div></div>
       <div class="stepper"><div class="lbl" data-i18n="menu.enemy">Противница</div><div class="row"><button class="round" data-step="enemy:-1">−</button><div class="val" id="lvEnemy">1</div><button class="round" data-step="enemy:1">+</button></div></div>
+      <div class="stepper"><div class="lbl" data-i18n="menu.count">Противниц</div><div class="row"><button class="round" data-step="count:-1">−</button><div class="val" id="lvCount">1</div><button class="round" data-step="count:1">+</button></div></div>
     </div>
     <div class="hint" id="lvHint"></div>
     <button class="btn ghost" id="startBtn" data-i18n="menu.start">Тренировка</button>
