@@ -59,7 +59,9 @@
 - Любой текст для игрока — только через `t()`: новый ключ добавлять сразу в оба файла `js/lang/*.js`.
   Не называть локальные переменные `t` в функциях, где вызывается перевод.
 - Репозиторий публичный: только безопасные (R) спрайты.
-- Проверка: headless Chromium через Playwright, хук `window.__proto` (`startFight`, `startRun`,
+- Автотесты: `python -m pytest` (папка `tests/`, CI — `.github/workflows/tests.yml`). Перед каждым коммитом —
+  весь набор зелёный; новая механика или контент — сразу тест. Бот забега — `tests/test_run.py` (`BOT`).
+- Проверка вручную: headless Chromium через Playwright, хук `window.__proto` (`startFight`, `startRun`,
   `press/move/release`, `circle`, `captureChance`, `guardCenter`, `chooseDoor`, `chooseNode`, `genFloor`,
   `fightWith(ids, h, e)` — групповой бой, `startExplore`, `genDungeon`, `exGoTo`, `setAuto`, `setSpeed`,
   `fastForward(сек)` — прокрутить игровое время мгновенно; с автобоем бой считается за ~20 мс).

@@ -3671,6 +3671,7 @@
       for (let i = 1; i <= n; i++) { const a = i / n * turns * Math.PI * 2; onMove({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }, 99); }
       onRelease(99);
     },
+    bonusKinds: Object.keys(BONUS),
     captureChance: () => (fight ? captureChance(fight.enemy) : 0),
     guardCenter: () => guardCenter(),
     setAuto: (v) => { G.auto = !!v; },
