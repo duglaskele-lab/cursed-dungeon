@@ -153,7 +153,7 @@
       const stages = [];
       for (const src of e.sprites) {
         const img = await loadImage(src);
-        stages.push({ img, white: tinted(img, '#ffffff'), red: tinted(img, '#ff2a2a'), w: img.naturalWidth, h: img.naturalHeight });
+        stages.push({ img, white: tinted(img, '#ffffff'), red: tinted(img, '#ff2a2a'), dark: tinted(img, '#0a0610'), w: img.naturalWidth, h: img.naturalHeight });
       }
       assets[id] = { stages };
     }));
@@ -400,48 +400,104 @@
   const hasRelic = (h, id) => h.relics.includes(id);
   function parryWindow(h) { return { pmin: D.hero.parryMin, pmax: D.hero.parryMax + h.mods.parryBonus }; }
 
-  function newFight(id, heroLvl, enemyLvl, opts = {}) {
-    const ed = D.enemies[id];
-    const st = assets[id].stages;
-    const s0 = st[0];
-    const maxH = ed.height || 620, maxW = 500;
-    const sc = Math.min(maxH / s0.h, maxW / s0.w);
-    const dw = s0.w * sc, dh = s0.h * sc;
-    const bottom = HUD_BOTTOM + 6;
-    const cx = W / 2 + (ed.offsetX || 0) * sc;
+  // ---------------------------------------------------------------- противницы в бою
+  // Бой — это список противниц fight.foes. Впереди (slot 'front') одна: её бьют тапы, она атакует героя,
+  // на неё указывают fight.enemy / fight.ed / fight.id / fight.layout. Задние ('left', 'right') помогают ей.
+  function makeFoe(id, enemyLvl, mul) {
+    const ed = D.enemies[id], st = assets[id].stages, s0 = st[0];
+    const kind = ed.kind || 'normal', lv = enemyLvl - 1;
+    const sc = Math.min((ed.height || 620) / s0.h, 500 / s0.w);
+    const e = {
+      lvl: enemyLvl, kind,
+      hpMax: Math.round(ed.hp * (1 + 0.22 * lv) * mul.hp), hp: 0,
+      stamMax: Math.round(ed.stamina * (1 + 0.32 * lv) * mul.hp), stam: 0,
+      dmgScale: (1 + 0.18 * lv) * mul.dmg,
+      atk: { ...ed.attack }, sph: { ...ed.spheres }, vinesCfg: null, phase: 0,
+      stage: 0, parts: armorParts(ed, st.length), state: 'idle', st: 0,
+      nextAttack: rand(1.4, 2.2), strikesLeft: 0, telDur: 0, lastStamHit: -9,
+      nextSpheres: rand(3, 5), nextWeak: rand(3, 5), nextVine: rand(3, 5), lastStand: false,
+      burn: 0, burnDps: 0, burnTick: 0,
+      anim: { white: 0, lunge: 0, knock: 0, sx: 1, sy: 1 }
+    };
+    e.hp = e.hpMax;
+    e.stam = e.stamMax;
+    return {
+      id, ed, enemy: e, slot: 'front', outcome: null, pos: null, target: null,
+      base: { w: s0.w * sc, h: s0.h * sc, off: (ed.offsetX || 0) * sc },
+      sup: { sphere: rand(4, 7), heal: rand(7, 11), step: rand(11, 17), stepT: 0 }
+    };
+  }
+
+  function newFight(ids, heroLvl, enemyLvl, opts = {}) {
+    ids = [].concat(ids);
+    const mul = (ids.length > 1 && D.group && D.group[ids.length]) || { hp: 1, dmg: 1 };
+    const foes = ids.map((id, i) => Object.assign(makeFoe(id, enemyLvl, mul), { slot: ['front', 'left', 'right'][i] }));
+    const ed = foes[0].ed, kind = ed.kind || 'normal';
     const hero = makeHero(heroLvl, opts.runHero);
-    const kind = ed.kind || 'normal';
-    const lv = enemyLvl - 1;
     fight = {
-      id, ed, t: 0, over: false, outcome: null, resultShown: false, overT: 0, endT: 0,
+      foes, front: null, results: [], next: null, threads: [], cam: null,
+      id: null, ed: null, enemy: null, layout: null,
+      t: 0, over: false, outcome: null, resultShown: false, overT: 0, endT: 0,
       inRun: !!opts.runHero, theme: ed.theme || (kind === 'boss' ? 'spirit' : 'dungeon'),
-      layout: { cx, bottom, dw, dh, top: bottom - dh, chestY: bottom - dh * (ed.chest || 0.62) },
       hero,
-      enemy: {
-        lvl: enemyLvl, kind,
-        hpMax: Math.round(ed.hp * (1 + 0.22 * lv)), hp: 0,
-        stamMax: Math.round(ed.stamina * (1 + 0.32 * lv)), stam: 0,
-        dmgScale: 1 + 0.18 * lv,
-        atk: { ...ed.attack }, sph: { ...ed.spheres }, vinesCfg: null, phase: 0,
-        stage: 0, parts: armorParts(ed, st.length), state: 'idle', st: 0,
-        nextAttack: rand(1.4, 2.2), strikesLeft: 0, telDur: 0, lastStamHit: -9,
-        nextSpheres: rand(3, 5), nextWeak: rand(3, 5), nextVine: rand(3, 5), lastStand: false,
-        burn: 0, burnDps: 0, burnTick: 0,
-        anim: { white: 0, lunge: 0, knock: 0, sx: 1, sy: 1 }
-      },
-      spheres: [], weak: null, vines: [], hazard: HAZARDS[ed.hazard] || HAZARDS.vines, guardT: -9, guardPresses: [],
+      spheres: [], weak: null, vines: [], hazard: null, guardT: -9, guardPresses: [],
       fx: { texts: [], parts: [], shards: [], trails: [], links: [], shields: [] },
       shake: 0, hitStop: 0, tip: '', tipT: 0, banner: null,
       stats: { taps: 0, slashes: 0, parries: 0, blocks: 0, links: 0, breaks: 0, taken: 0, vines: 0, captureTries: 0, captures: 0 }
     };
-    const e = fight.enemy;
-    e.hp = e.hpMax;
-    e.stam = e.stamMax;
+    setFront(foes[0]);
+    layoutFoes(true);
     hero.stamPower = levelMod(heroLvl, enemyLvl) * (1 + D.hero.dmgPerLvl * (heroLvl - 1)) * hero.mods.dmgMul;
-    if (kind === 'boss' && ed.phases) applyPhase(e, 0, false);
-    const kindLabel = kind === 'boss' ? t('kind.boss') : kind === 'elite' ? t('kind.elite') : ed.subtitle;
-    fight.banner = { title: ed.name, sub: kind === 'boss' ? ed.phases[0].title : kindLabel, t: 0, life: 1.8 };
+    if (kind === 'boss' && ed.phases) applyPhase(fight.enemy, 0, false);
+    if (foes.length > 1) {
+      fight.banner = { title: foes.map((f) => f.ed.name).join(' · '), sub: t('fight.group', { n: foes.length }), t: 0, life: 2.2 };
+      tip(t('tip.group'), 5);
+    } else {
+      const kindLabel = kind === 'boss' ? t('kind.boss') : kind === 'elite' ? t('kind.elite') : ed.subtitle;
+      fight.banner = { title: ed.name, sub: kind === 'boss' ? ed.phases[0].title : kindLabel, t: 0, life: 1.8 };
+    }
     resetInput();
+  }
+
+  // Передняя противница: все ссылки боя указывают на неё
+  function setFront(foe) {
+    const old = fight.front;
+    if (old && old !== foe) old.slot = old.outcome ? 'gone' : foe.slot;
+    foe.slot = 'front';
+    foe.sup.stepT = 0;
+    fight.front = foe; fight.enemy = foe.enemy; fight.ed = foe.ed; fight.id = foe.id;
+    fight.hazard = HAZARDS[foe.ed.hazard] || HAZARDS.vines;
+    fight.weak = null;
+    layoutFoes(false);
+  }
+  const backFoes = () => fight.foes.filter((f) => f.slot !== 'front' && f.slot !== 'gone' && !f.outcome);
+
+  // Расстановка в глубину: передняя крупно по центру, задние меньше, выше по полу, по краям
+  function foeLayout(foe) {
+    const backs = backFoes();
+    let x = 0.5, s = 1, lift = 0;
+    if (foe.slot === 'front') {
+      if (backs.length === 1) { x = backs[0].slot === 'left' ? 0.6 : 0.4; s = 0.86; }
+      else if (backs.length > 1) s = 0.82;
+    } else { x = foe.slot === 'left' ? 0.19 : 0.81; s = 0.6; lift = 150; }
+    const dw = foe.base.w * s, dh = foe.base.h * s, bottom = HUD_BOTTOM + 6 - lift;
+    return { cx: W * x + foe.base.off * s, bottom, dw, dh, top: bottom - dh, chestY: bottom - dh * (foe.ed.chest || 0.62), s };
+  }
+  function layoutFoes(snap) {
+    for (const f of fight.foes) {
+      if (!f.outcome || !f.target) f.target = foeLayout(f);
+      if (snap || !f.pos) f.pos = { cx: f.target.cx, bottom: f.target.bottom, s: f.target.s };
+    }
+    fight.layout = fight.front.target;
+  }
+  // где противница нарисована сейчас (позиции плавно догоняют расстановку)
+  function posRect(foe) {
+    const p = foe.pos, dw = foe.base.w * p.s, dh = foe.base.h * p.s;
+    return { cx: p.cx, bottom: p.bottom, dw, dh, top: p.bottom - dh, chestY: p.bottom - dh * (foe.ed.chest || 0.62) };
+  }
+  function foeBox(foe) {
+    const L = foe.target;
+    return { x0: L.cx - L.dw * 0.3, x1: L.cx + L.dw * 0.3, y0: L.top + L.dh * 0.08, y1: L.bottom - 10 };
   }
 
   function applyPhase(e, idx, announce = true) {
@@ -568,34 +624,113 @@
     crit ? sfx.crit() : sfx.hit(mult);
   }
 
-  function heroSlash(path) {
+  // Рассечение: по передней (hitFront) и/или по задним противницам, через которые прошёл росчерк
+  function heroSlash(path, hitFront = true, backs = []) {
     if (!fighting()) return;
     const h = fight.hero, e = fight.enemy;
     const p0 = path[0], p1 = path[path.length - 1];
-    if (!enemyActive(e)) return;
+    hitFront = hitFront && enemyActive(e);
+    if (!hitFront && !backs.length) return;
     fight.fx.trails.push({ pts: path.map((p) => ({ x: p.x, y: p.y })), t: 0, life: 0.35, color: '#ffffff', w: 10 });
     if (h.shock > 0) { h.shock--; h.chargeT = 0; floatText(p1.x, p1.y, t('fight.shockSlash'), D.elements.electric.color, 22); sfx.fail(); return; }
     spendStamina(h, D.hero.slashCost);
     let mult = chargeMult(h);
     h.chargeT = 0;
-    let crit = false;
-    if (fight.weak && pathHitsCircle(path, fight.weak.x, fight.weak.y, 40)) { crit = true; mult *= hasRelic(h, 'claw') ? 3 : 2; enemyStamina(e, 8 * h.stamPower); fight.weak = null; }
     const ex = (h.exhausted ? 0.2 : 1) * (h.entangled > 0 ? 0.5 : 1);
-    const dmg = h.dmg * 1.3 * h.mods.slashMul * levelMod(h.lvl, e.lvl) * mult * armorBonus(e) * ex * rand(0.92, 1.08);
-    const mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2;
-    damageEnemy(dmg, mx, my - 20, crit ? '#ffd060' : '#9fe3ff', true);
-    floatText(mx, my - 62, crit ? t('fight.slashCrit') : t('fight.slash'), '#bfefff', 24);
-    enemyStamina(e, (6 + 7 * (mult - 1)) * h.stamPower * ex);
-    const a = e.anim;
-    a.white = 0.9; a.knock = 1; a.sx = 1.05; a.sy = 0.95;
     fight.hitStop = 0.08; fight.shake = Math.max(fight.shake, 9);
     fight.fx.trails.push({ pts: path.map((p) => ({ x: p.x, y: p.y })), t: 0, life: 0.5, color: '#9fe3ff', w: 22 });
-    burst(mx, my, 18, ['#bfefff', '#ffffff', '#7fd8ff'], 360, 0.45, 4, 150);
+    for (const b of backs) slashBack(b, mult, ex);
+    if (hitFront && !fight.over) {
+      let crit = false;
+      if (fight.weak && pathHitsCircle(path, fight.weak.x, fight.weak.y, 40)) { crit = true; mult *= hasRelic(h, 'claw') ? 3 : 2; enemyStamina(e, 8 * h.stamPower); fight.weak = null; }
+      const dmg = h.dmg * 1.3 * h.mods.slashMul * levelMod(h.lvl, e.lvl) * mult * armorBonus(e) * ex * rand(0.92, 1.08);
+      const mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2;
+      damageEnemy(dmg, mx, my - 20, crit ? '#ffd060' : '#9fe3ff', true);
+      floatText(mx, my - 62, crit ? t('fight.slashCrit') : t('fight.slash'), '#bfefff', 24);
+      enemyStamina(e, (6 + 7 * (mult - 1)) * h.stamPower * ex);
+      const a = e.anim;
+      a.white = 0.9; a.knock = 1; a.sx = 1.05; a.sy = 0.95;
+      burst(mx, my, 18, ['#bfefff', '#ffffff', '#7fd8ff'], 360, 0.45, 4, 150);
+      if (fight.over) return;
+      tryBreak(e);
+    }
     if (fight.over) return;
-    tryBreak(e);
     addCombo(h);
     fight.stats.slashes++;
     sfx.slash();
+  }
+
+  // Росчерк задела задняя противница: урон и выносливость; выход вперёд сбивается
+  function slashBack(foe, mult, ex) {
+    const h = fight.hero, e = foe.enemy, L = foe.target;
+    const dmg = h.dmg * 1.3 * h.mods.slashMul * levelMod(h.lvl, e.lvl) * mult * armorBonus(e) * ex * rand(0.92, 1.08);
+    e.hp = Math.max(0, e.hp - dmg);
+    e.stam = Math.max(0, e.stam - (6 + 7 * (mult - 1)) * h.stamPower * ex);
+    e.anim.white = 0.9; e.anim.knock = 1;
+    floatText(L.cx + rand(-10, 10), L.chestY, String(Math.round(dmg)), '#9fe3ff', 28, 0.8);
+    burst(L.cx, L.chestY, 12, ['#bfefff', '#ffffff'], 260, 0.4, 3, 150);
+    if (foe.sup.stepT > 0) {
+      foe.sup.stepT = 0; foe.sup.step = rand(10, 15);
+      e.stam = Math.max(0, e.stam - 10 * h.stamPower);
+      floatText(L.cx, L.top + 8, t('fight.stepStopped'), '#ffe9a8', 22);
+    }
+    if (e.hp <= 0) backDone(foe);
+  }
+
+  // Задняя выходит вперёд: передняя отходит на её место, начатая атака отменяется
+  function stepForward(foe) {
+    const old = fight.front, oe = old.enemy;
+    if (oe.state !== 'stun') { oe.state = 'idle'; oe.st = 0; }
+    oe.strikesLeft = 0; oe.nextAttack = rand(1, 2);
+    old.sup.step = rand(12, 18); old.sup.stepT = 0;
+    setFront(foe);
+    const e = foe.enemy;
+    e.state = 'idle'; e.st = 0; e.nextAttack = rand(0.9, 1.4);
+    floatText(fight.layout.cx, fight.layout.top + 40, t('fight.stepIn'), '#ffe9a8', 26, 1.1, -30);
+    sfx.guard();
+  }
+
+  // Помощь задних: свои сферы, нить лечения к передней, выход вперёд
+  function updateBacks(dt, rdt) {
+    const front = fight.enemy;
+    for (const foe of fight.foes) {
+      if (foe === fight.front) continue;
+      const e = foe.enemy, a = e.anim, s = foe.sup;
+      a.white = Math.max(0, a.white - rdt * 4);
+      a.knock = Math.max(0, a.knock - rdt * 5);
+      a.lunge = Math.max(0, a.lunge - rdt * 3.2);
+      a.sx = lerp(a.sx, 1, Math.min(1, rdt * 14)); a.sy = lerp(a.sy, 1, Math.min(1, rdt * 14));
+      if (e.state === 'leaving') { e.st += rdt; continue; }
+      if (foe.outcome || fight.over || fight.next || dt === 0 || !enemyActive(front)) continue;
+      s.sphere -= dt;
+      if (s.sphere <= 0) { spawnSpheres(e); s.sphere = rand(e.sph.every[0], e.sph.every[1]) * 1.3; }
+      s.heal -= dt;
+      if (s.heal <= 0) {
+        s.heal = rand(9, 13);
+        if (front.hp < front.hpMax * 0.97 && !fight.threads.some((th) => th.foe === foe)) fight.threads.push({ foe, t: 0, dur: 2.8 });
+      }
+      if (s.stepT > 0) {
+        s.stepT -= dt;
+        if (s.stepT <= 0) stepForward(foe);
+      } else {
+        s.step -= dt;
+        if (s.step <= 0 && (front.state === 'idle' || front.state === 'recover')) { s.stepT = 1.6; sfx.tel(); }
+      }
+    }
+    for (const th of [...fight.threads]) {
+      if (fight.over || fight.next) break;
+      th.t += dt;
+      if (th.t < th.dur) continue;
+      fight.threads = fight.threads.filter((x) => x !== th);
+      const heal = Math.round(front.hpMax * 0.06);
+      front.hp = Math.min(front.hpMax, front.hp + heal);
+      floatText(fight.layout.cx, fight.layout.chestY - 20, '+' + heal, D.elements.nature.color, 30);
+    }
+  }
+  // линия нити лечения: от груди задней к груди передней
+  function threadLine(th) {
+    const a = posRect(th.foe), b = posRect(fight.front);
+    return [{ x: a.cx, y: a.chestY }, { x: b.cx, y: b.chestY }];
   }
 
   // Защита: нажатие в круг удара. В тайминг — парирование, палец в круге в момент удара — блок.
@@ -628,7 +763,10 @@
     e.anim.white = 1;
     sfx.armor();
     const last = isLastStage(e);
-    floatText(L.cx, L.chestY - 40, t(last ? 'fight.shattered' : 'fight.armorBroken'), last ? '#ffd060' : '#ffe2a8', last ? 36 : 34, 1.4, -30);
+    // близкий кадр: камера наезжает на противницу, время замедляется — видно, что изменилось
+    fight.cam = { t: 0, dur: last ? 2.1 : 1.7, x: L.cx, y: L.top + L.dh * 0.34, z: last ? 1.6 : 1.45 };
+    fight.weak = null;
+    floatText(W / 2, HUD_BOTTOM - 90, t(last ? 'fight.shattered' : 'fight.armorBroken'), last ? '#ffd060' : '#ffe2a8', last ? 36 : 34, 1.6, -20);   // ниже лица — в близком кадре видно её
     e.state = 'stun'; e.st = 1.5; e.strikesLeft = 0;
     e.stam = e.stamMax * 0.85;
     if (e.kind === 'boss') applyPhase(e, e.stage);
@@ -677,26 +815,51 @@
     burst(L.cx, L.chestY, 50, ['#e9c27a', '#fff3d0', '#b48cff'], 300, 1, 4, 0);
     const prev = save.captured[fight.id];
     save.captured[fight.id] = { lvl: Math.max(fight.enemy.lvl, prev ? prev.lvl : 0), at: Date.now(), times: (prev ? prev.times || 1 : 0) + 1 };
-    endFight('captured');
+    foeDone('captured');
   }
 
   function endByEnemyHp() {
     const e = fight.enemy;
-    if (isLastStage(e)) { sfx.win(); endFight('defeated'); }
-    else endFight('escaped');
+    if (isLastStage(e)) { sfx.win(); foeDone('defeated'); }
+    else foeDone('escaped');
+  }
+
+  function recordResult(foe, outcome) {
+    foe.outcome = outcome;
+    fight.results.push({ id: foe.id, ed: foe.ed, outcome, stage: foe.enemy.stage, lvl: foe.enemy.lvl });
+  }
+  // Передняя выбыла: следующей станет случайная из оставшихся
+  function foeDone(outcome) {
+    const foe = fight.front, e = foe.enemy;
+    if (foe.outcome) return;
+    recordResult(foe, outcome);
+    const rest = fight.foes.filter((f) => !f.outcome);
+    if (!rest.length) { endFight(outcome); return; }
+    e.state = 'leaving'; e.st = 0;
+    fight.weak = null;
+    fight.threads = fight.threads.filter((th) => th.foe !== foe);
+    fight.next = { t: 1.0, foe: pick(rest) };
+  }
+  // Задняя противница выбыла от росчерков: брони она не теряла, поэтому сбегает
+  function backDone(foe) {
+    recordResult(foe, isLastStage(foe.enemy) ? 'defeated' : 'escaped');
+    foe.enemy.state = 'leaving'; foe.enemy.st = 0;
+    fight.threads = fight.threads.filter((th) => th.foe !== foe);
+    if (!fight.foes.some((f) => !f.outcome)) endFight(foe.outcome);
   }
 
   function endFight(outcome) {
     if (fight.over) return;
     fight.over = true;
-    fight.outcome = outcome;
+    const group = fight.foes.length > 1;
+    fight.outcome = outcome === 'lose' ? 'lose' : group ? 'group' : outcome;
     fight.endT = fight.t;
     fight.overT = 0;
     const e = fight.enemy;
     e.state = 'leaving'; e.st = 0;
-    fight.spheres = []; fight.weak = null; fight.vines = [];
+    fight.spheres = []; fight.weak = null; fight.vines = []; fight.threads = []; fight.next = null;
     if (outcome === 'lose') sfx.lose();
-    save.fights.unshift({ id: fight.id, h: fight.hero.lvl, e: e.lvl, t: Math.round(fight.t), o: outcome, run: fight.inRun });
+    save.fights.unshift({ id: fight.foes[0].id, ids: group ? fight.foes.map((f) => f.id) : undefined, h: fight.hero.lvl, e: e.lvl, t: Math.round(fight.t), o: fight.outcome, run: fight.inRun });
     save.fights = save.fights.slice(0, 8);
     writeSave();
   }
@@ -877,6 +1040,19 @@
         }
       }
     }
+    // нить лечения рвётся росчерком поперёк
+    for (const th of [...fight.threads]) {
+      const [a, b] = threadLine(th);
+      for (let i = 1; i < path.length; i++) {
+        if (!segIntersect(path[i - 1], path[i], a, b)) continue;
+        fight.threads = fight.threads.filter((x) => x !== th);
+        th.foe.enemy.stam = Math.max(0, th.foe.enemy.stam - 12 * fight.hero.stamPower);
+        floatText(path[i].x, path[i].y - 20, t('fight.threadCut'), D.elements.nature.color, 22);
+        burst(path[i].x, path[i].y, 14, [D.elements.nature.color, '#eaffd8'], 240, 0.4, 3, 0);
+        sfx.vine();
+        break;
+      }
+    }
     if (isLastStage(e) && enemyActive(e)) {
       const ring = circleGesture(path);
       if (ring && inBox(enemyBox(), ring.x, ring.y)) { tryCapture(path, ring); return; }
@@ -909,7 +1085,8 @@
     for (let i = 1; i < path.length; i++) len += dist(path[i - 1].x, path[i - 1].y, path[i].x, path[i].y);
     const box = enemyBox();
     const crosses = path.some((p) => inBox(box, p.x, p.y));
-    if (len >= 90 && crosses) heroSlash(path);
+    const backs = backFoes().filter((f) => path.some((p) => inBox(foeBox(f), p.x, p.y)));
+    if (len >= 90 && (crosses || backs.length)) heroSlash(path, crosses, backs);
     else if (hit.length === 1) floatText(hit[0].x, hit[0].y - 30, t('fight.needTwo'), '#ffe9a8', 20);
   }
 
@@ -919,8 +1096,20 @@
     if (!f.over) f.t += dt; else f.overT += dt;
     let dtE = dt;
     if (f.hitStop > 0) { f.hitStop -= dt; dtE = 0; }
+    if (f.cam) {
+      f.cam.t += dt;
+      if (f.cam.t >= f.cam.dur || f.over) f.cam = null;
+      else dtE *= 0.25;          // замедление на время близкого кадра
+    }
     updateHero(dt);
     updateEnemy(dtE, dt);
+    updateBacks(dtE, dt);
+    updateNextFoe(dt);
+    layoutFoes(false);
+    for (const foe of f.foes) {
+      const p = foe.pos, g = foe.target, k = Math.min(1, dt * 5);
+      p.cx = lerp(p.cx, g.cx, k); p.bottom = lerp(p.bottom, g.bottom, k); p.s = lerp(p.s, g.s, k);
+    }
     updateSpheres(dtE);
     updateVines(dtE);
     updateFx(dt);
@@ -929,6 +1118,22 @@
     if (f.banner) { f.banner.t += dt; if (f.banner.t > f.banner.life) f.banner = null; }
 
     if (f.over && !f.resultShown && f.overT > 1.4) { f.resultShown = true; showResult(); }
+  }
+
+  // после ухода передней — пауза, затем вперёд выходит случайная из оставшихся
+  function updateNextFoe(dt) {
+    const f = fight;
+    if (!f.next || f.over) return;
+    f.next.t -= dt;
+    if (f.next.t > 0) return;
+    const rest = f.foes.filter((x) => !x.outcome);
+    const nf = rest.includes(f.next.foe) ? f.next.foe : pick(rest);
+    f.next = null;
+    if (!nf) return;
+    setFront(nf);
+    const e = nf.enemy;
+    e.state = 'idle'; e.st = 0; e.nextAttack = rand(1.0, 1.6); e.strikesLeft = 0;
+    f.banner = { title: nf.ed.name, sub: t('fight.nextUp'), t: 0, life: 1.4 };
   }
 
   function updateHero(dt) {
@@ -1060,11 +1265,22 @@
     const sx = f.shake ? rand(-f.shake, f.shake) : 0, sy = f.shake ? rand(-f.shake, f.shake) : 0;
     ctx.save();
     ctx.translate(sx, sy);
+    const k = camZoom();
+    ctx.save();
+    if (k > 0) {
+      // фокус камеры плавно переходит из точки на противнице в верхнюю часть экрана
+      const c = f.cam, z = lerp(1, c.z, k);
+      ctx.translate(lerp(c.x, W / 2, k), lerp(c.y, 400, k));
+      ctx.scale(z, z);
+      ctx.translate(-c.x, -c.y);
+    }
     drawBackground(f.theme, G.time);
-    drawEnemy();
+    drawFoes();
     drawWeak();
     drawTelegraph();
     drawForeground(f.theme);
+    ctx.restore();
+    if (k > 0) drawCloseupVignette(k);
     drawVines();
     drawSpheres();
     drawFx();
@@ -1077,9 +1293,69 @@
     drawSwipe();
   }
 
-  function drawEnemy() {
-    const f = fight, e = f.enemy, a = e.anim, L = f.layout;
-    const sts = assets[f.id].stages;
+  // Близкий кадр: 0 — обычный вид, 1 — полное приближение (наезд 0,3 с, отъезд 0,5 с)
+  function camZoom() {
+    const c = fight.cam;
+    if (!c) return 0;
+    const k = Math.min(c.t / 0.3, 1, (c.dur - c.t) / 0.5);
+    return clamp(k, 0, 1) * clamp(k, 0, 1) * (3 - 2 * clamp(k, 0, 1));
+  }
+  function drawCloseupVignette(k) {
+    const v = ctx.createRadialGradient(W / 2, 360, 120, W / 2, 360, 520);
+    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, `rgba(0,0,0,${0.45 * k})`);
+    ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  }
+
+  // Сначала задние (притемнены), нити лечения, затем передняя и уходящие
+  function drawFoes() {
+    const f = fight;
+    for (const foe of f.foes) if (foe !== f.front && foe.slot !== 'gone') drawFoe(foe, true);
+    drawThreads();
+    for (const foe of f.foes) if (foe.slot === 'gone') drawFoe(foe, false);
+    drawFoe(f.front, false);
+    if (camZoom() < 0.05) for (const foe of f.foes) if (foe !== f.front && !foe.outcome) drawBackHud(foe);
+  }
+
+  function drawThreads() {
+    for (const th of fight.threads) {
+      const [a, b] = threadLine(th), k = th.t / th.dur;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = `rgba(111,220,106,${0.25 + 0.35 * k})`; ctx.lineWidth = 10; ctx.lineCap = 'round';
+      line(ctx, a.x, a.y, b.x, b.y);
+      ctx.strokeStyle = `rgba(230,255,210,${0.6 + 0.3 * Math.sin(G.time * 12)})`; ctx.lineWidth = 3;
+      line(ctx, a.x, a.y, b.x, b.y);
+      for (let i = 0; i < 4; i++) {
+        const p = (G.time * 0.8 + i / 4) % 1;
+        ctx.fillStyle = 'rgba(200,255,180,.9)';
+        ctx.beginPath(); ctx.arc(lerp(a.x, b.x, p), lerp(a.y, b.y, p), 4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Над задней противницей: имя, здоровье, стрелка выхода вперёд
+  function drawBackHud(foe) {
+    const e = foe.enemy, L = posRect(foe), w = 96, x = L.cx - w / 2, y = Math.max(HUD_TOP + 8, L.top - 8);
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.font = `600 12px ${bodyFont}`;
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(8,6,12,.9)';
+    ctx.strokeText(foe.ed.name, L.cx, y - 6); ctx.fillStyle = '#e9c27a'; ctx.fillText(foe.ed.name, L.cx, y - 6);
+    bar(x, y, w, 7, e.hp / e.hpMax, '#d9473f');
+    if (foe.sup.stepT > 0) {
+      const k = 1 - foe.sup.stepT / 1.6, ay = y - 46 + Math.sin(G.time * 10) * 3;
+      ctx.fillStyle = '#ffd060';
+      ctx.beginPath(); ctx.moveTo(L.cx - 14, ay); ctx.lineTo(L.cx + 14, ay); ctx.lineTo(L.cx, ay + 16); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#ffd060'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(L.cx, ay + 6, 22, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawFoe(foe, back) {
+    const f = fight, e = foe.enemy, a = e.anim, L = posRect(foe);
+    if (e.state === 'leaving' && e.st > 2.5) return;
+    const sts = assets[foe.id].stages;
     const st = sts[spriteIndex(sts.length, e.stage, e.parts)];
     let x = L.cx, y = L.bottom, sc = 1, alpha = 1, rot = 0;
     const breathe = 1 + Math.sin(G.time * 2.1) * 0.006;
@@ -1093,10 +1369,10 @@
     y += 26 * a.lunge;
     y -= 10 * a.knock;
     if (e.state === 'leaving') {
-      const t = e.st;
-      if (f.outcome === 'escaped') { x += t * 520; alpha = clamp(1 - t * 0.9, 0, 1); }
-      else if (f.outcome === 'captured') { sc *= Math.max(0.05, 1 - t * 0.75); alpha = clamp(1 - t * 0.5, 0, 1); y -= t * 120; }
-      else if (f.outcome !== 'lose') { alpha = clamp(1 - t * 0.8, 0, 1); y += t * 60; }
+      const lt = e.st, o = foe.outcome || f.outcome;
+      if (o === 'escaped') { x += (x < W / 2 ? -1 : 1) * lt * 520; alpha = clamp(1 - lt * 0.9, 0, 1); }
+      else if (o === 'captured') { sc *= Math.max(0.05, 1 - lt * 0.75); alpha = clamp(1 - lt * 0.5, 0, 1); y -= lt * 120; }
+      else if (o !== 'lose') { alpha = clamp(1 - lt * 0.8, 0, 1); y += lt * 60; }
     }
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -1110,11 +1386,16 @@
       ctx.globalAlpha = alpha * (0.12 + 0.3 * p) * (0.75 + 0.25 * Math.sin(G.time * 24));
       ctx.drawImage(st.red, dx, dy, L.dw, L.dh);
     }
+    if (back && foe.sup.stepT <= 0) {
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.drawImage(st.dark, dx, dy, L.dw, L.dh);
+    }
     if (a.white > 0) {
       ctx.globalAlpha = alpha * a.white;
       ctx.drawImage(st.white, dx, dy, L.dw, L.dh);
     }
     ctx.restore();
+    if (back) return;
     if (e.state === 'stun') drawStars(L.cx, L.top + 30);
     if (e.burn > 0 && enemyActive(e)) {
       for (let i = 0; i < 2; i++) burstAt(L.cx + rand(-L.dw * 0.25, L.dw * 0.25), L.chestY + rand(-60, 120));
@@ -1344,7 +1625,7 @@
   // Без брони: над противницей — шанс захвата кругом (или «нет печатей»)
   function drawCaptureHint() {
     const f = fight, e = f.enemy, L = f.layout;
-    if (f.over || !isLastStage(e)) return;
+    if (f.over || f.next || !isLastStage(e) || !enemyActive(e)) return;
     const seals = f.hero.seals > 0;
     const p = Math.round(captureChance(e) * 100);
     const text = seals ? t('hud.captureChance', { p }) : t('hud.noSeals');
@@ -2304,15 +2585,18 @@
     run.fights++;
     run.time += f.endT;
     if (f.outcome === 'lose') { runOver(); return; }
-    if (f.outcome === 'captured') run.captured.push(f.id);
+    const res = f.results, group = f.foes.length > 1;
+    res.forEach((r) => { if (r.outcome === 'captured') run.captured.push(r.id); });
     if (node.type === 'boss') { runComplete(); return; }
-    const base = f.ed.xp;
-    const xp = Math.round(base * (f.outcome === 'captured' ? 0.8 : f.outcome === 'escaped' ? 0.5 : 1));
+    const xpMul = (o) => (o === 'captured' ? 0.8 : o === 'escaped' ? 0.5 : 1);
+    const xp = Math.round(res.reduce((sum, r) => sum + r.ed.xp * xpMul(r.outcome), 0));
     const lv = grantXp(xp);
     const lines = [t('reward.xp', { n: xp })];
-    if (f.outcome === 'captured') {
-      lines.push(t('reward.caught', { name: f.ed.name }));
-      if (companionSlots(f.id).length) lines.push(t('reward.joins', { list: companionLine(f.id) }));
+    if (group) res.forEach((r) => lines.push(t('reward.groupLine', { name: r.ed.name, out: t('out.' + r.outcome) })));
+    for (const r of res) {
+      if (r.outcome !== 'captured') continue;
+      lines.push(t('reward.caught', { name: r.ed.name }));
+      if (companionSlots(r.id).length) lines.push(t('reward.joins', { list: companionLine(r.id) }));
     }
     if (lv) lines.push(t('reward.lvl', { n: rh.lvl }));
     lines.push('', t('reward.pick'));
@@ -2326,7 +2610,7 @@
     G.mode = 'map';
     hide(ui.result);
     if (lv) sfx.level();
-    showPanel({ kicker: node.type === 'elite' ? t('reward.eliteKicker') : t('reward.kicker'), title: resultTitle(f.outcome), img: spriteFor(f.ed, f.enemy.stage), text: lines.join('\n'), choices });
+    showPanel({ kicker: node.type === 'elite' ? t('reward.eliteKicker') : t('reward.kicker'), title: group ? t('res.group') : resultTitle(f.outcome), img: spriteFor(res[0].ed, res[0].stage), text: lines.join('\n'), choices });
   }
 
   function resultTitle(o) { return ['captured', 'defeated', 'escaped', 'lose'].includes(o) ? t('res.' + o) : ''; }
@@ -2603,12 +2887,13 @@
       : d === 0 ? t('hint.equal')
       : d > 0 ? t('hint.stronger', { n: d })
       : t('hint.weaker', { n: -d });
-    const outName = (o) => (['captured', 'finished', 'defeated', 'escaped', 'lose'].includes(o) ? t('out.' + o) : o);
+    const outName = (o) => (['captured', 'finished', 'defeated', 'escaped', 'lose', 'group'].includes(o) ? t('out.' + o) : o);
     const log = $('#log');
     log.innerHTML = save.fights.length ? '' : `<div><span>${t('log.empty')}</span></div>`;
     for (const r of save.fights) {
       const row = document.createElement('div');
-      row.innerHTML = `<span>${D.enemies[r.id] ? D.enemies[r.id].name : r.id} · ${r.h} / ${r.e}${r.run ? t('log.run') : ''}</span><span>${fmtTime(r.t)} · ${outName(r.o)}</span>`;
+      const who = (r.ids || [r.id]).map((id) => (D.enemies[id] ? D.enemies[id].name : id)).join(' + ');
+      row.innerHTML = `<span>${who} · ${r.h} / ${r.e}${r.run ? t('log.run') : ''}</span><span>${fmtTime(r.t)} · ${outName(r.o)}</span>`;
       log.appendChild(row);
     }
     const col = $('#collection');
@@ -2673,20 +2958,23 @@
     const f = fight, s = f.stats, h = f.hero, e = f.enemy, ed = f.ed;
     G.mode = 'result';
     hide(ui.pauseBtn);
-    const gold = Math.round((40 + 12 * e.lvl) * (f.outcome === 'escaped' ? 0.5 : 1));
-    $('#resTitle').textContent = resultTitle(f.outcome);
+    const group = f.foes.length > 1;
+    const gold = f.results.reduce((sum, r) => sum + Math.round((40 + 12 * r.lvl) * (r.outcome === 'escaped' ? 0.5 : 1)), 0);
+    $('#resTitle').textContent = group && f.outcome !== 'lose' ? t('res.group') : resultTitle(f.outcome);
     $('#resTitle').className = f.outcome === 'lose' ? 'bad' : '';
-    $('#resSub').textContent = t(`res.${f.outcome}.sub`, { name: ed.name, gold });
+    $('#resSub').textContent = group && f.outcome !== 'lose'
+      ? f.results.map((r) => t('reward.groupLine', { name: r.ed.name, out: t('out.' + r.outcome) })).join(' · ') + '. ' + t('res.group.sub', { gold })
+      : t(`res.${f.outcome}.sub`, { name: ed.name, gold });
     const dur = f.endT;
-    const d = h.lvl - e.lvl;
-    const [lo, hi] = e.kind === 'boss' ? [180, 300] : d === 0 ? [25, 60] : d > 0 ? [10, 25] : [60, 120];
+    const d = h.lvl - e.lvl, n = f.foes.length;
+    const [lo, hi] = (e.kind === 'boss' ? [180, 300] : d === 0 ? [25, 60] : d > 0 ? [10, 25] : [60, 120]).map((v) => Math.round(v * (n > 1 ? n * 0.85 : 1)));
     const cls = dur < lo ? 'warn' : dur > hi ? 'bad' : 'ok';
     const verdict = t(dur < lo ? 'res.fast' : dur > hi ? 'res.slow' : 'res.ok');
     const items = [
       [t('st.time'), `<span class="${cls}">${fmtTime(dur)}</span>`, t('res.target', { lo: fmtTime(lo), hi: fmtTime(hi), v: verdict }), true],
       [t('st.taps'), s.taps], [t('st.slashes'), s.slashes],
       [t('st.parries'), s.parries], [t('st.blocks'), s.blocks],
-      [t('st.links'), s.links], [t('st.breaks'), `${s.breaks} / ${e.parts}`],
+      [t('st.links'), s.links], [t('st.breaks'), `${s.breaks} / ${f.foes.reduce((sum, x) => sum + x.enemy.parts, 0)}`],
       [t('st.combo'), h.maxCombo], [t('st.taken'), Math.round(s.taken)]
     ];
     if (s.vines) items.push([f.hazard.stat, s.vines]);
@@ -2770,7 +3058,7 @@
     const stages = [];
     for (const src of data.sprites) {
       const img = await loadImage(src);
-      stages.push({ img, white: tinted(img, '#ffffff'), red: tinted(img, '#ff2a2a'), w: img.naturalWidth, h: img.naturalHeight });
+      stages.push({ img, white: tinted(img, '#ffffff'), red: tinted(img, '#ff2a2a'), dark: tinted(img, '#0a0610'), w: img.naturalWidth, h: img.naturalHeight });
     }
     assets[id] = { stages };
     D.enemies[id] = data;
@@ -2793,7 +3081,8 @@
   window.__proto = {
     G, input, ui,
     get fight() { return fight; }, get run() { return run; },
-    startFight: startTraining, startRun, chooseDoor, chooseNode, genFloor, heroTap, resolveSwipe,
+    startFight: startTraining, startRun,
+    fightWith: (ids, h = 1, e = 1) => { run = null; newFight(ids, h, e); G.mode = 'fight'; G.paused = false; hideAllOverlays(); show(ui.pauseBtn); }, chooseDoor, chooseNode, genFloor, heroTap, resolveSwipe,
     press: (x, y) => onPress({ x, y }, 99), move: (x, y) => onMove({ x, y }, 99), release: () => onRelease(99),
     // начертить круг жестом (как пальцем): центр, радиус, доля оборота
     circle: (cx, cy, r, turns = 1.05) => {
